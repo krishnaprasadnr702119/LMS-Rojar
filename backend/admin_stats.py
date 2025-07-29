@@ -37,6 +37,8 @@ def get_system_statistics(user_id=None, role=None):
             'total_users': User.query.count(),
             'total_organizations': Organization.query.count(),
             'active_organizations': Organization.query.filter_by(status='active').count(),
+            'total_portal_admins': User.query.filter_by(role='portal_admin').count(),
+            'total_employees': User.query.filter_by(role='employee').count(),
         })
 
         # Recent organizations (up to 5)

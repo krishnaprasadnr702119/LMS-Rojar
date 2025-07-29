@@ -1631,31 +1631,378 @@ function AnalyticsContent() {
 }
 
 function SettingsContent() {
+  const token = getToken();
+  const payload = token ? parseJwt(token) : null;
+  const username = payload?.username || 'Unknown';
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [changePassword, setChangePassword] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [changePasswordSubmitting, setChangePasswordSubmitting] = useState(false);
+
+  const handleSelfPasswordReset = async () => {
+    if (!confirm('Are you sure you want to reset your password? A new password will be sent to your email.')) {
+      return;
+    }
+
+    try {
+      setResettingPassword(true);
+      const response = await fetch('/api/portal_admin/reset_my_password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert('Password reset successfully! Check your email for the new password.');
+      } else {
+        alert(`Error: ${data.error || 'Failed to reset password'}`);
+      }
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      alert('Network error when resetting password');
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    
+    if (changePassword.newPassword !== changePassword.confirmPassword) {
+      alert('New passwords do not match');
+      return;
+    }
+
+    if (changePassword.newPassword.length < 6) {
+      alert('New password must be at least 6 characters long');
+      return;
+    }
+
+    try {
+      setChangePasswordSubmitting(true);
+      const response = await fetch('/api/change_password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: username,
+          current_password: changePassword.currentPassword,
+          new_password: changePassword.newPassword
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert('Password changed successfully!');
+        setChangePassword({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      } else {
+        alert(`Error: ${data.error || 'Failed to change password'}`);
+      }
+    } catch (err) {
+      console.error('Error changing password:', err);
+      alert('Network error when changing password');
+    } finally {
+      setChangePasswordSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ padding: '32px', animation: 'fadeIn 0.5s ease-out' }}>
       <div style={{
-        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-        borderRadius: '20px',
-        padding: '48px',
-        textAlign: 'center',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08)'
+        maxWidth: '800px',
+        margin: '0 auto'
       }}>
-        <div style={{ fontSize: '64px', marginBottom: '24px' }}>⚙️</div>
-        <h2 style={{
-          fontSize: '28px',
+        <h1 style={{
+          fontSize: '32px',
           fontWeight: '800',
           color: '#1e293b',
-          margin: '0 0 16px 0'
+          marginBottom: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
         }}>
-          Settings & Configuration
-        </h2>
-        <p style={{
-          fontSize: '18px',
-          color: '#64748b',
-          margin: 0
+          ⚙️ Settings & Security
+        </h1>
+
+        {/* Password Management Section */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '20px',
+          padding: '32px',
+          marginBottom: '32px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(255,255,255,0.2)'
         }}>
-          System settings and configuration options coming soon...
-        </p>
+          <h2 style={{
+            fontSize: '24px',
+            fontWeight: '700',
+            color: '#1e293b',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            🔐 Password Management
+          </h2>
+
+          {/* Quick Password Reset */}
+          <div style={{
+            padding: '24px',
+            background: 'rgba(239, 68, 68, 0.05)',
+            borderRadius: '12px',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            marginBottom: '32px'
+          }}>
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#dc2626',
+              marginBottom: '12px'
+            }}>
+              Quick Password Reset
+            </h3>
+            <p style={{
+              color: '#64748b',
+              marginBottom: '16px',
+              lineHeight: '1.6'
+            }}>
+              Forgot your password? Generate a new temporary password that will be sent to your email address.
+            </p>
+            <button
+              onClick={handleSelfPasswordReset}
+              disabled={resettingPassword}
+              style={{
+                padding: '12px 24px',
+                background: resettingPassword 
+                  ? '#d1d5db' 
+                  : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: resettingPassword ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {resettingPassword ? '🔄 Sending Reset Email...' : '📧 Reset Password via Email'}
+            </button>
+          </div>
+
+          {/* Change Password Form */}
+          <div style={{
+            padding: '24px',
+            background: 'rgba(59, 130, 246, 0.05)',
+            borderRadius: '12px',
+            border: '1px solid rgba(59, 130, 246, 0.2)'
+          }}>
+            <h3 style={{
+              fontSize: '18px',
+              fontWeight: '600',
+              color: '#3b82f6',
+              marginBottom: '12px'
+            }}>
+              Change Password
+            </h3>
+            <p style={{
+              color: '#64748b',
+              marginBottom: '24px',
+              lineHeight: '1.6'
+            }}>
+              Update your password by providing your current password and choosing a new one.
+            </p>
+            
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '8px'
+                }}>
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={changePassword.currentPassword}
+                  onChange={(e) => setChangePassword({...changePassword, currentPassword: e.target.value})}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '8px'
+                }}>
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={changePassword.newPassword}
+                  onChange={(e) => setChangePassword({...changePassword, newPassword: e.target.value})}
+                  required
+                  minLength="6"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  marginBottom: '8px'
+                }}>
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={changePassword.confirmPassword}
+                  onChange={(e) => setChangePassword({...changePassword, confirmPassword: e.target.value})}
+                  required
+                  minLength="6"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={changePasswordSubmitting}
+                style={{
+                  padding: '12px 24px',
+                  background: changePasswordSubmitting
+                    ? '#d1d5db'
+                    : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: changePasswordSubmitting ? 'not-allowed' : 'pointer',
+                  alignSelf: 'flex-start'
+                }}
+              >
+                {changePasswordSubmitting ? '🔄 Updating Password...' : '🔐 Update Password'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Account Information Section */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '20px',
+          padding: '32px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <h2 style={{
+            fontSize: '24px',
+            fontWeight: '700',
+            color: '#1e293b',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            👤 Account Information
+          </h2>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '24px'
+          }}>
+            <div style={{
+              padding: '20px',
+              background: 'rgba(16, 185, 129, 0.05)',
+              borderRadius: '12px',
+              border: '1px solid rgba(16, 185, 129, 0.2)'
+            }}>
+              <div style={{
+                fontSize: '14px',
+                color: '#10b981',
+                fontWeight: '600',
+                marginBottom: '8px'
+              }}>
+                Username
+              </div>
+              <div style={{
+                fontSize: '18px',
+                color: '#1e293b',
+                fontWeight: '700'
+              }}>
+                {username}
+              </div>
+            </div>
+            
+            <div style={{
+              padding: '20px',
+              background: 'rgba(139, 92, 246, 0.05)',
+              borderRadius: '12px',
+              border: '1px solid rgba(139, 92, 246, 0.2)'
+            }}>
+              <div style={{
+                fontSize: '14px',
+                color: '#8b5cf6',
+                fontWeight: '600',
+                marginBottom: '8px'
+              }}>
+                Role
+              </div>
+              <div style={{
+                fontSize: '18px',
+                color: '#1e293b',
+                fontWeight: '700'
+              }}>
+                Portal Administrator
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

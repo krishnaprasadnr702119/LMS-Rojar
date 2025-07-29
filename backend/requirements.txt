@@ -6,3 +6,5 @@ PyJWT
 werkzeug
 python-dotenv
 bcrypt
+flask-bcrypt
+flask-mail

@@ -18,9 +18,9 @@ def hash_password(password):
 # These values can be overridden by environment variables
 DB_HOST = os.getenv('DB_HOST', 'db')  # 'db' is the common service name in docker-compose
 DB_PORT = os.getenv('DB_PORT', '5432')
-DB_USER = os.getenv('DB_USER', 'postgres')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-DB_NAME = os.getenv('DB_NAME', 'lms')
+DB_USER = os.getenv('DB_USER', 'lmsuser')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'lmspassword')
+DB_NAME = os.getenv('DB_NAME', 'lmsdb')
 
 # Update database URI if needed
 if 'DATABASE_URL' not in os.environ:

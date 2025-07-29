@@ -7,6 +7,7 @@ import string
 import secrets
 import subprocess
 import json
+import bcrypt
 from datetime import datetime
 from sqlalchemy import extract
 from models import db, User, Organization, Course, Module, ModuleContent, QuizQuestion, QuizOption, Task, organization_courses, CourseRequest, CourseProgress
@@ -15,6 +16,14 @@ from models import db, User, Organization, Course, Module, ModuleContent, QuizQu
 load_dotenv()
 
 app = Flask(__name__)
+
+def verify_password(stored_password, provided_password):
+    """Verify a stored password against provided password."""
+    return bcrypt.checkpw(provided_password.encode('utf-8'), stored_password.encode('utf-8'))
+
+def hash_password(password):
+    """Hash a password for storing."""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 # Assign a course to all employees in an organization
 @app.route('/api/portal_admin/assign_course_to_all', methods=['POST'])
@@ -186,7 +195,7 @@ def create_test_user():
     if User.query.filter_by(email=email).first():
         return jsonify({'success': False, 'message': 'Email already exists'}), 400
         
-    user = User(username=username, password=password, role=role, email=email, designation=designation, org_id=org_id)
+    user = User(username=username, password=hash_password(password), role=role, email=email, designation=designation, org_id=org_id)
     db.session.add(user)
     db.session.commit()
     return jsonify({'success': True, 'message': f'User {username} created', 'role': role})
@@ -266,7 +275,7 @@ def create_organization():
         # Create portal admin user and link to organization
         portal_admin_user = User(
             username=portal_admin,
-            password=admin_password,
+            password=hash_password(admin_password),
             role='portal_admin',
             email=admin_email,
             designation=admin_designation,
@@ -346,18 +355,35 @@ def delete_organization(org_id):
     try:
         org = Organization.query.get_or_404(org_id)
         
+        # First, remove all course assignments from employees in this organization
+        employees = User.query.filter_by(org_id=org_id, role='employee').all()
+        for employee in employees:
+            employee.courses.clear()
+        db.session.flush()
+        
+        # Delete all course requests associated with this organization
+        course_requests_to_delete = CourseRequest.query.filter_by(organization_id=org_id).all()
+        for request in course_requests_to_delete:
+            db.session.delete(request)
+        db.session.flush()
+        
+        # Remove all course assignments from the organization
+        org.courses.clear()
+        db.session.flush()
+        
         # Delete all users associated with this organization
         users_to_delete = User.query.filter_by(org_id=org_id).all()
         for user in users_to_delete:
             db.session.delete(user)
+        db.session.flush()  # Ensure users are deleted before deleting org
         
-        # Delete the organization (this will also handle course associations via cascade)
+        # Finally, delete the organization
         db.session.delete(org)
         db.session.commit()
         
         return jsonify({
             "success": True, 
-            "message": f"Organization and {len(users_to_delete)} associated user(s) deleted successfully"
+            "message": f"Organization, {len(users_to_delete)} user(s), and {len(course_requests_to_delete)} course request(s) deleted successfully"
         })
         
     except Exception as e:
@@ -719,8 +745,12 @@ def login():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    user = User.query.filter_by(username=username, password=password).first()
-    if user:
+    
+    # Find user by username only
+    user = User.query.filter_by(username=username).first()
+    
+    # Verify password using bcrypt
+    if user and verify_password(user.password, password):
         # Generate JWT token with role
         payload = {
             'user_id': user.id,
@@ -867,8 +897,8 @@ def admin_reset_portal_admin_password():
         # Generate new password
         new_password = generate_temp_password()
         
-        # Update password in database
-        portal_admin.password = new_password
+        # Update password in database with proper hashing
+        portal_admin.password = hash_password(new_password)
         db.session.commit()
         
         # Send email notification
@@ -922,8 +952,8 @@ def portal_admin_reset_employee_password():
         # Generate new password
         new_password = generate_temp_password()
         
-        # Update password in database
-        employee.password = new_password
+        # Update password in database with proper hashing
+        employee.password = hash_password(new_password)
         db.session.commit()
         
         # Send email notification
@@ -967,18 +997,69 @@ def change_password():
         if len(new_password) < 6:
             return jsonify({'success': False, 'error': 'New password must be at least 6 characters long'}), 400
             
-        # Find and verify user
-        user = User.query.filter_by(username=username, password=current_password).first()
-        if not user:
+        # Find user and verify current password
+        user = User.query.filter_by(username=username).first()
+        if not user or not verify_password(user.password, current_password):
             return jsonify({'success': False, 'error': 'Invalid username or current password'}), 401
             
-        # Update password
-        user.password = new_password
+        # Update password with proper hashing
+        user.password = hash_password(new_password)
         db.session.commit()
         
         return jsonify({
             'success': True,
             'message': 'Password changed successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/portal_admin/reset_my_password', methods=['POST'])
+def portal_admin_reset_my_password():
+    """Portal admin self-service password reset"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        if not data.get('username'):
+            return jsonify({'success': False, 'error': 'Username is required'}), 400
+            
+        username = data['username'].strip()
+        
+        # Find the portal admin user
+        portal_admin = User.query.filter_by(username=username, role='portal_admin').first()
+        if not portal_admin:
+            return jsonify({'success': False, 'error': 'Portal admin not found'}), 404
+            
+        # Get organization info
+        organization = None
+        if portal_admin.org_id:
+            organization = db.session.get(Organization, portal_admin.org_id)
+            
+        org_name = organization.name if organization else "LMS Portal"
+        
+        # Generate new password
+        new_password = generate_temp_password()
+        
+        # Update password in database with proper hashing
+        portal_admin.password = hash_password(new_password)
+        db.session.commit()
+        
+        # Send email notification
+        email_sent, email_message = send_password_reset_email(
+            portal_admin.email,
+            portal_admin.username,
+            org_name,
+            new_password,
+            "Portal Admin Password Reset"
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'Your password has been reset successfully. Check your email for the new password.',
+            'email_sent': email_sent,
+            'email_message': email_message
         })
         
     except Exception as e:
@@ -1033,7 +1114,7 @@ def invite_employee():
             # Create new user
             new_user = User(
                 username=username,
-                password=temp_password,  # In production, hash this properly
+                password=hash_password(temp_password),  # Hash the password properly
                 email=email,
                 designation=designation,
                 org_id=organization.id,
@@ -1194,7 +1275,7 @@ def create_employee():
             # Create new user
             new_user = User(
                 username=username,
-                password=password,  # Note: In production, hash this properly
+                password=hash_password(password),  # Hash the password properly
                 email=email,
                 designation=designation,
                 org_id=portal_admin.org_id,
@@ -1707,6 +1788,99 @@ def get_admin_system_stats():
         print(f"Error getting system stats: {str(e)}")
         return jsonify({
             'error': f'Failed to get system statistics: {str(e)}'
+        }), 500
+
+@app.route('/api/admin/portal_admins', methods=['GET'])
+def get_portal_admins():
+    """Get list of all portal admins for admin dashboard"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+            
+        # Verify admin role
+        user = User.query.filter_by(username=username, role='admin').first()
+        if not user:
+            return jsonify({'error': 'Unauthorized access - Admin role required'}), 403
+            
+        # Get all portal admins with their organization info
+        portal_admins = db.session.query(User, Organization).outerjoin(
+            Organization, User.org_id == Organization.id
+        ).filter(User.role == 'portal_admin').all()
+        
+        portal_admin_list = []
+        for admin, org in portal_admins:
+            portal_admin_list.append({
+                'id': admin.id,
+                'username': admin.username,
+                'email': admin.email,
+                'designation': admin.designation,
+                'created_at': admin.created_at.isoformat() if admin.created_at else None,
+                'organization': {
+                    'id': org.id if org else None,
+                    'name': org.name if org else 'No Organization',
+                    'domain': org.org_domain if org else None,
+                    'status': org.status if org else None
+                } if org else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'portal_admins': portal_admin_list,
+            'total_count': len(portal_admin_list)
+        })
+            
+    except Exception as e:
+        print(f"Error getting portal admins: {str(e)}")
+        return jsonify({
+            'error': f'Failed to get portal admins: {str(e)}'
+        }), 500
+
+@app.route('/api/admin/all_users', methods=['GET'])
+def get_all_users():
+    """Get list of all users for admin dashboard"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+            
+        # Verify admin role
+        user = User.query.filter_by(username=username, role='admin').first()
+        if not user:
+            return jsonify({'error': 'Unauthorized access - Admin role required'}), 403
+            
+        # Get all users with their organization info
+        all_users = db.session.query(User, Organization).outerjoin(
+            Organization, User.org_id == Organization.id
+        ).all()
+        
+        user_list = []
+        for user_obj, org in all_users:
+            user_list.append({
+                'id': user_obj.id,
+                'username': user_obj.username,
+                'email': user_obj.email,
+                'role': user_obj.role,
+                'designation': user_obj.designation,
+                'created_at': user_obj.created_at.isoformat() if user_obj.created_at else None,
+                'organization': {
+                    'id': org.id if org else None,
+                    'name': org.name if org else 'No Organization',
+                    'domain': org.org_domain if org else None,
+                    'status': org.status if org else None
+                } if org else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'users': user_list,
+            'total_count': len(user_list)
+        })
+            
+    except Exception as e:
+        print(f"Error getting all users: {str(e)}")
+        return jsonify({
+            'error': f'Failed to get all users: {str(e)}'
         }), 500
 
 @app.route('/api/portal_admin/organization_statistics', methods=['GET'])

@@ -4,8 +4,822 @@ import CourseList from './CourseList';
 import CourseRequestManagement from './CourseRequestManagement';
 // QuizManager has been integrated into CourseViewer
 import RoleIndicator from '../components/RoleIndicator';
-import { FaChevronLeft, FaChevronRight, FaBuilding, FaChartBar, FaBook, FaCog, FaCreditCard, FaTachometerAlt, FaShoppingCart, FaQuestionCircle } from 'react-icons/fa';
+import { FaChevronLeft, FaChevronRight, FaBuilding, FaChartBar, FaBook, FaCog, FaCreditCard, FaTachometerAlt, FaShoppingCart, FaQuestionCircle, FaUsers } from 'react-icons/fa';
 import { getToken, parseJwt } from '../utils/auth';
+
+// Portal Admins List Component
+function PortalAdminsList({ username }) {
+  const [portalAdmins, setPortalAdmins] = useState([]);
+  const [filteredPortalAdmins, setFilteredPortalAdmins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [resettingPassword, setResettingPassword] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchPortalAdmins = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/admin/portal_admins?username=${username}`);
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setPortalAdmins(data.portal_admins);
+          setFilteredPortalAdmins(data.portal_admins);
+          setError(null);
+        } else {
+          setError(data.error || 'Failed to fetch portal admins');
+          setPortalAdmins([]);
+          setFilteredPortalAdmins([]);
+        }
+      } catch (err) {
+        console.error('Error fetching portal admins:', err);
+        setError('Network error when fetching portal admins');
+        setPortalAdmins([]);
+        setFilteredPortalAdmins([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPortalAdmins();
+  }, [username]);
+
+  // Filter portal admins based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredPortalAdmins(portalAdmins);
+    } else {
+      const filtered = portalAdmins.filter(admin =>
+        admin.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        admin.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (admin.designation && admin.designation.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (admin.organization && admin.organization.name && admin.organization.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredPortalAdmins(filtered);
+    }
+  }, [searchTerm, portalAdmins]);
+
+  const handleResetPassword = async (adminUsername) => {
+    if (!confirm(`Are you sure you want to reset the password for ${adminUsername}?`)) {
+      return;
+    }
+
+    try {
+      setResettingPassword(adminUsername);
+      const response = await fetch('/api/admin/reset_portal_admin_password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          portal_admin_username: adminUsername
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert(`Password reset successfully for ${adminUsername}. ${data.email_sent ? 'Email sent to user.' : 'Email could not be sent.'}`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to reset password'}`);
+      }
+    } catch (err) {
+      console.error('Error resetting password:', err);
+      alert('Network error when resetting password');
+    } finally {
+      setResettingPassword(null);
+    }
+  };
+
+  return (
+    <div style={{ padding: '40px', background: '#f8fafc', minHeight: '100vh' }}>
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '24px',
+          padding: '40px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '32px'
+          }}>
+            <div>
+              <h1 style={{
+                fontSize: '32px',
+                fontWeight: '800',
+                margin: 0,
+                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                👨‍💼 Portal Admins
+              </h1>
+              <p style={{
+                color: '#64748b',
+                margin: '8px 0 0 0',
+                fontSize: '16px'
+              }}>
+                Manage and view all portal administrators in the system
+              </p>
+            </div>
+            <div style={{
+              padding: '12px 24px',
+              background: 'linear-gradient(135deg, #dbeafe, #e0e7ff)',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: '600',
+              color: '#3730a3',
+              border: '1px solid rgba(59,130,246,0.2)'
+            }}>
+              {filteredPortalAdmins.length} of {portalAdmins.length} Total
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div style={{
+            marginBottom: '32px',
+            display: 'flex',
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '500px'
+            }}>
+              <input
+                type="text"
+                placeholder="🔍 Search portal admins by name, email, designation, or organization..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '16px 20px',
+                  paddingLeft: '24px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '16px',
+                  fontSize: '16px',
+                  fontWeight: '500',
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(59,130,246,0.15)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.05)';
+                }}
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{
+                    position: 'absolute',
+                    right: '16px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '4px'
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid #e5e7eb',
+                borderTop: '4px solid #3b82f6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                margin: '0 auto 16px'
+              }}></div>
+              <p style={{ color: '#64748b', fontSize: '16px' }}>Loading portal admins...</p>
+            </div>
+          ) : error ? (
+            <div style={{
+              background: '#fee2e2',
+              padding: '32px',
+              borderRadius: '16px',
+              border: '1px solid #fecaca',
+              textAlign: 'center'
+            }}>
+              <h3 style={{ margin: 0, color: '#dc2626', fontSize: '20px' }}>Error Loading Data</h3>
+              <p style={{ marginTop: '12px', color: '#7f1d1d' }}>{error}</p>
+            </div>
+          ) : filteredPortalAdmins.length === 0 && portalAdmins.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px',
+              color: '#64748b'
+            }}>
+              <FaUsers style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }} />
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>No Portal Admins Found</h3>
+              <p style={{ margin: 0, fontSize: '16px' }}>There are currently no portal administrators in the system.</p>
+            </div>
+          ) : filteredPortalAdmins.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px',
+              color: '#64748b'
+            }}>
+              <FaUsers style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }} />
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>No Results Found</h3>
+              <p style={{ margin: 0, fontSize: '16px' }}>No portal admins match your search criteria. Try a different search term.</p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+              gap: '24px'
+            }}>
+              {filteredPortalAdmins.map((admin) => (
+                <div key={admin.id} style={{
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                  padding: '24px',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
+                }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #ec4899, #be185d)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px',
+                      fontWeight: '700',
+                      marginRight: '16px'
+                    }}>
+                      {admin.username[0]?.toUpperCase() || 'P'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#1f2937'
+                      }}>
+                        {admin.username}
+                      </h3>
+                      <p style={{
+                        margin: '4px 0 0 0',
+                        fontSize: '14px',
+                        color: '#64748b'
+                      }}>
+                        {admin.designation}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#64748b',
+                      marginBottom: '4px'
+                    }}>
+                      Email:
+                    </div>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#1f2937',
+                      fontWeight: '500'
+                    }}>
+                      {admin.email}
+                    </div>
+                  </div>
+
+                  {admin.organization ? (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: '#64748b',
+                        marginBottom: '4px'
+                      }}>
+                        Organization:
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          fontSize: '14px',
+                          color: '#1f2937',
+                          fontWeight: '500'
+                        }}>
+                          {admin.organization.name}
+                        </div>
+                        <div style={{
+                          padding: '2px 8px',
+                          background: admin.organization.status === 'active' ? '#dcfce7' : '#fee2e2',
+                          color: admin.organization.status === 'active' ? '#16a34a' : '#dc2626',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          {admin.organization.status}
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#64748b',
+                        marginTop: '4px'
+                      }}>
+                        Domain: {admin.organization.domain}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '12px',
+                      background: '#fef3c7',
+                      borderRadius: '8px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: '#92400e',
+                        fontWeight: '500'
+                      }}>
+                        ⚠️ No Organization Assigned
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#64748b',
+                    paddingTop: '16px',
+                    borderTop: '1px solid #e5e7eb',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span>Created: {admin.created_at ? new Date(admin.created_at).toLocaleDateString() : 'Unknown'}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResetPassword(admin.username);
+                      }}
+                      disabled={resettingPassword === admin.username}
+                      style={{
+                        padding: '6px 12px',
+                        background: resettingPassword === admin.username 
+                          ? '#d1d5db' 
+                          : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: resettingPassword === admin.username ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseOver={(e) => {
+                        if (resettingPassword !== admin.username) {
+                          e.currentTarget.style.transform = 'scale(1.05)';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      {resettingPassword === admin.username ? '🔄 Resetting...' : '🔐 Reset Password'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Total Users List Component
+function TotalUsersList({ username }) {
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/admin/all_users?username=${username}`);
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setUsers(data.users);
+          setFilteredUsers(data.users);
+          setError(null);
+        } else {
+          setError(data.error || 'Failed to fetch users');
+          setUsers([]);
+          setFilteredUsers([]);
+        }
+      } catch (err) {
+        console.error('Error fetching users:', err);
+        setError('Network error when fetching users');
+        setUsers([]);
+        setFilteredUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUsers();
+  }, [username]);
+
+  // Filter users based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredUsers(users);
+    } else {
+      const filtered = users.filter(user =>
+        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.designation && user.designation.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (user.organization && user.organization.name && user.organization.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredUsers(filtered);
+    }
+  }, [searchTerm, users]);
+
+  return (
+    <div style={{ padding: '40px', background: '#f8fafc', minHeight: '100vh' }}>
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '24px',
+          padding: '40px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '32px'
+          }}>
+            <div>
+              <h1 style={{
+                fontSize: '32px',
+                fontWeight: '800',
+                margin: 0,
+                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                👥 Total Users
+              </h1>
+              <p style={{
+                color: '#64748b',
+                margin: '8px 0 0 0',
+                fontSize: '16px'
+              }}>
+                View and manage all users in the system
+              </p>
+            </div>
+            <div style={{
+              padding: '12px 24px',
+              background: 'linear-gradient(135deg, #dbeafe, #e0e7ff)',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: '600',
+              color: '#3730a3',
+              border: '1px solid rgba(59,130,246,0.2)'
+            }}>
+              {filteredUsers.length} of {users.length} Total
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div style={{
+            position: 'relative',
+            marginBottom: '32px'
+          }}>
+            <input
+              type="text"
+              placeholder="Search users by name, email, role, designation, or organization..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                fontSize: '16px',
+                border: '2px solid #e5e7eb',
+                borderRadius: '16px',
+                background: '#ffffff',
+                outline: 'none',
+                transition: 'all 0.3s ease',
+                boxSizing: 'border-box',
+                paddingRight: searchTerm ? '50px' : '20px'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#3b82f6';
+                e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e5e7eb';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                style={{
+                  position: 'absolute',
+                  right: '16px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '20px',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  width: '24px',
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = '#f1f5f9';
+                  e.target.style.color = '#ef4444';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'none';
+                  e.target.style.color = '#64748b';
+                }}
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                border: '4px solid #e5e7eb',
+                borderTop: '4px solid #3b82f6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                margin: '0 auto 16px'
+              }}></div>
+              <p style={{ color: '#64748b', fontSize: '16px' }}>Loading users...</p>
+            </div>
+          ) : error ? (
+            <div style={{
+              background: '#fee2e2',
+              padding: '32px',
+              borderRadius: '16px',
+              border: '1px solid #fecaca',
+              textAlign: 'center'
+            }}>
+              <h3 style={{ margin: 0, color: '#dc2626', fontSize: '20px' }}>Error Loading Data</h3>
+              <p style={{ marginTop: '12px', color: '#7f1d1d' }}>{error}</p>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px',
+              color: '#64748b'
+            }}>
+              <FaUsers style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }} />
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>
+                {searchTerm ? 'No Users Found' : 'No Users Found'}
+              </h3>
+              <p style={{ margin: 0, fontSize: '16px' }}>
+                {searchTerm ? 'No users match your search criteria.' : 'There are currently no users in the system.'}
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+              gap: '24px'
+            }}>
+              {filteredUsers.map((user) => (
+                <div key={user.id} style={{
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                  padding: '24px',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
+                }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      background: user.role === 'admin' ? 'linear-gradient(135deg, #ef4444, #dc2626)' :
+                                  user.role === 'portal_admin' ? 'linear-gradient(135deg, #ec4899, #be185d)' :
+                                  'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px',
+                      fontWeight: '700',
+                      marginRight: '16px'
+                    }}>
+                      {user.username[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#1f2937'
+                      }}>
+                        {user.username}
+                      </h3>
+                      <p style={{
+                        margin: '4px 0 0 0',
+                        fontSize: '14px',
+                        color: '#64748b'
+                      }}>
+                        {user.designation || 'No designation'}
+                      </p>
+                    </div>
+                    <div style={{
+                      padding: '4px 12px',
+                      background: user.role === 'admin' ? '#fee2e2' :
+                                  user.role === 'portal_admin' ? '#fce7f3' :
+                                  '#dbeafe',
+                      color: user.role === 'admin' ? '#dc2626' :
+                             user.role === 'portal_admin' ? '#ec4899' :
+                             '#3b82f6',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}>
+                      {user.role.replace('_', ' ').toUpperCase()}
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#64748b',
+                      marginBottom: '4px'
+                    }}>
+                      Email:
+                    </div>
+                    <div style={{
+                      fontSize: '14px',
+                      color: '#1f2937',
+                      fontWeight: '500'
+                    }}>
+                      {user.email}
+                    </div>
+                  </div>
+
+                  {user.organization ? (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: '#64748b',
+                        marginBottom: '4px'
+                      }}>
+                        Organization:
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          fontSize: '14px',
+                          color: '#1f2937',
+                          fontWeight: '500'
+                        }}>
+                          {user.organization.name}
+                        </div>
+                        <div style={{
+                          padding: '2px 8px',
+                          background: user.organization.status === 'active' ? '#dcfce7' : '#fee2e2',
+                          color: user.organization.status === 'active' ? '#16a34a' : '#dc2626',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          {user.organization.status}
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#64748b',
+                        marginTop: '4px'
+                      }}>
+                        Domain: {user.organization.domain}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '12px',
+                      background: '#fef3c7',
+                      borderRadius: '8px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{
+                        fontSize: '14px',
+                        color: '#92400e',
+                        fontWeight: '500'
+                      }}>
+                        ⚠️ No Organization Assigned
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#64748b',
+                    paddingTop: '16px',
+                    borderTop: '1px solid #e5e7eb'
+                  }}>
+                    Created: {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 function AdminDashboard() {
@@ -46,14 +860,23 @@ function AdminDashboard() {
   }, [username]);
 
   return (
-    <div style={{
-      display: 'flex',
-      minHeight: '100vh',
-      width: '100vw',
-      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      position: 'relative',
-      background: '#f8fafc'
-    }}>
+    <>
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+      <div style={{
+        display: 'flex',
+        minHeight: '100vh',
+        width: '100vw',
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        position: 'relative',
+        background: '#f8fafc'
+      }}>
       <RoleIndicator />
       {/* Sidebar */}
       <aside style={{
@@ -93,6 +916,8 @@ function AdminDashboard() {
           {[
             { label: 'Dashboard', icon: <FaTachometerAlt />, color: '#3b82f6' },
             { label: 'Organization list', icon: <FaBuilding />, color: '#10b981' },
+            { label: 'Portal Admins', icon: <FaUsers />, color: '#ec4899' },
+            { label: 'Total Users', icon: <FaUsers />, color: '#3b82f6' },
             { label: 'Courses', icon: <FaBook />, color: '#f59e0b' },
             { label: 'Course Requests', icon: <FaShoppingCart />, color: '#ec4899' },
             { label: 'Analytics', icon: <FaChartBar />, color: '#8b5cf6' },
@@ -347,10 +1172,11 @@ function AdminDashboard() {
                   </div>
                 ) : userRole === 'admin' ? [
                   // Superadmin stats
-                  { label: 'Total Users', value: stats?.total_users || 0, icon: '👥', color: '#3b82f6', bgColor: '#dbeafe' },
-                  { label: 'Courses Created', value: stats?.total_courses || 0, icon: '📚', color: '#10b981', bgColor: '#d1fae5' },
-                  { label: 'Active Organizations', value: stats?.active_organizations || 0, icon: '⚡', color: '#f59e0b', bgColor: '#fef3c7' },
-                  { label: 'Total Organizations', value: stats?.total_organizations || 0, icon: '🏢', color: '#8b5cf6', bgColor: '#ede9fe' }
+                  { label: 'Total Users', value: stats?.total_users || 0, icon: '👥', color: '#3b82f6', bgColor: '#dbeafe', clickable: true, page: 'Total Users' },
+                  { label: 'Portal Admins', value: stats?.total_portal_admins || 0, icon: '👨‍💼', color: '#ec4899', bgColor: '#fce7f3', clickable: true, page: 'Portal Admins' },
+                  { label: 'Courses Created', value: stats?.total_courses || 0, icon: '📚', color: '#10b981', bgColor: '#d1fae5', clickable: true, page: 'Courses' },
+                  { label: 'Active Organizations', value: stats?.active_organizations || 0, icon: '⚡', color: '#f59e0b', bgColor: '#fef3c7', clickable: true, page: 'Organization list' },
+                  { label: 'Total Organizations', value: stats?.total_organizations || 0, icon: '🏢', color: '#8b5cf6', bgColor: '#ede9fe', clickable: true, page: 'Organization list' }
                 ].map((stat, i) => (
                   <div key={i} style={{
                     background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
@@ -364,8 +1190,24 @@ function AdminDashboard() {
                     minHeight: 160,
                     border: '1px solid rgba(255,255,255,0.2)',
                     position: 'relative',
-                    overflow: 'hidden'
-                  }}>
+                    overflow: 'hidden',
+                    cursor: stat.clickable ? 'pointer' : 'default',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onClick={() => stat.clickable && setActivePage(stat.page)}
+                  onMouseOver={(e) => {
+                    if (stat.clickable) {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 16px 48px rgba(0,0,0,0.15)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (stat.clickable) {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.08)';
+                    }
+                  }}
+                  >
                     <div style={{
                       position: 'absolute',
                       top: 0,
@@ -697,6 +1539,12 @@ function AdminDashboard() {
         {activePage === 'Organization list' && (
           <OrganizationList />
         )}
+        {activePage === 'Portal Admins' && (
+          <PortalAdminsList username={username} />
+        )}
+        {activePage === 'Total Users' && (
+          <TotalUsersList username={username} />
+        )}
         {activePage === 'Courses' && (
           <CourseList />
         )}
@@ -705,6 +1553,7 @@ function AdminDashboard() {
         )}
       </main>
     </div>
+    </>
   );
 }
 
