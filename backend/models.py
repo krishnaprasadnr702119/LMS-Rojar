@@ -231,8 +231,11 @@ class ContentInteraction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content_id = db.Column(db.Integer, db.ForeignKey('module_content.id'), nullable=False)
-    interaction_type = db.Column(db.String(50), nullable=False)  # view, download, complete
+    interaction_type = db.Column(db.String(50), nullable=False)  # video_progress, pdf_progress, quiz_completed, content_complete
+    interaction_data = db.Column(db.Text, nullable=True)  # JSON data with detailed interaction info
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     duration_seconds = db.Column(db.Integer, nullable=True)
     completion_percentage = db.Column(db.Float, nullable=True)
     

@@ -4,6 +4,9 @@ import { getToken, parseJwt } from '../utils/auth';
 import { FaArrowLeft, FaBook, FaVideo, FaFilePdf, FaQuestionCircle, FaCheckCircle, FaEdit, FaPlusCircle, FaTrash } from 'react-icons/fa';
 import ReactPlayer from 'react-player';
 import { EnhancedVideoPlayer, EnhancedPdfViewer, MediaDebugger } from '../components/MediaHelpers';
+import EnhancedVideoTracker from '../components/EnhancedVideoTracker';
+import EnhancedPDFViewer from '../components/EnhancedPDFViewer';
+import EnhancedProgressDisplay from '../components/EnhancedProgressDisplay';
 import QuizTaker from '../components/QuizTaker';
 import '../components/Quiz.css';
 
@@ -41,6 +44,55 @@ function CourseViewer() {
       { option_text: '', is_correct: false }
     ]
   });
+  
+  // Progress refresh trigger
+  const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
+
+  // Handle automatic content completion
+  const handleAutoComplete = (completionData) => {
+    console.log('Content auto-completed:', completionData);
+    
+    // Refresh module progress to reflect the automatic completion
+    if (selectedModule) {
+      fetchModuleProgress(selectedModule.id);
+      setProgressRefreshTrigger(prev => prev + 1);
+    }
+    
+    // Show general success message
+    showAutoCompletionMessage(completionData);
+  };
+
+  const showAutoCompletionMessage = (data) => {
+    const typeMessages = {
+      video: '🎥 Video completed automatically!',
+      pdf: '📄 PDF completed automatically!',
+      quiz: '🎯 Quiz completed automatically!'
+    };
+    
+    console.log(`${typeMessages[data.type]} Progress updated for content ID: ${data.contentId}`);
+  };
+
+  // Fetch module progress for automatic tracking refresh
+  const fetchModuleProgress = async (moduleId) => {
+    if (!userInfo?.username || !moduleId) return;
+    
+    try {
+      const response = await fetch(`/api/employee/module_progress?username=${userInfo.username}&module_id=${moduleId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setModuleProgress(prev => ({
+          ...prev,
+          [moduleId]: {
+            completed: data.progress.completed,
+            progress_percentage: data.progress.progress_percentage
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching module progress:', error);
+    }
+  };
 
   useEffect(() => {
     const token = getToken();
@@ -581,13 +633,13 @@ function CourseViewer() {
                   borderRadius: '8px',
                   overflow: 'hidden'
                 }}>
-                  <EnhancedVideoPlayer 
-                    src={contentDetails.file_path}
-                    title={contentDetails.title}
-                    onError={(e) => {
-                      console.error("Video player error:", e);
-                      checkFileExists(contentDetails.file_path);
-                    }}
+                  <EnhancedVideoTracker
+                    url={`http://localhost:5000/${contentDetails.file_path}`}
+                    contentId={contentDetails.id}
+                    username={userInfo?.username}
+                    onAutoComplete={handleAutoComplete}
+                    width="100%"
+                    height="400px"
                   />
                 </div>
               )}
@@ -692,13 +744,13 @@ function CourseViewer() {
                   borderRadius: '8px',
                   overflow: 'hidden'
                 }}>
-                  <EnhancedPdfViewer 
-                    src={contentDetails.file_path}
-                    title={contentDetails.title}
-                    onError={(e) => {
-                      console.error("PDF viewer error:", e);
-                      checkFileExists(contentDetails.file_path);
-                    }}
+                  <EnhancedPDFViewer
+                    url={`http://localhost:5000/${contentDetails.file_path}`}
+                    contentId={contentDetails.id}
+                    username={userInfo?.username}
+                    onAutoComplete={handleAutoComplete}
+                    width="100%"
+                    height="600px"
                   />
                 </div>
               )}
@@ -1113,7 +1165,19 @@ function CourseViewer() {
               </div>
             </div>
           ) : selectedContent ? (
-            renderContent()
+            <div>
+              {renderContent()}
+              
+              {/* Enhanced Progress Display */}
+              {selectedModule && userInfo?.username && (
+                <EnhancedProgressDisplay
+                  moduleId={selectedModule.id}
+                  username={userInfo.username}
+                  refreshTrigger={progressRefreshTrigger}
+                  showDetailed={true}
+                />
+              )}
+            </div>
           ) : (
             <div className="select-content-message" style={{
               display: 'flex',

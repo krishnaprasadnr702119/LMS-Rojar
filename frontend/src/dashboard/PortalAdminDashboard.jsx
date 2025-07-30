@@ -14,6 +14,7 @@ import PortalAdminCourses from './PortalAdminCourses';
 import RoleIndicator from '../components/RoleIndicator';
 import { getToken, parseJwt } from '../utils/auth';
 import EnhancedDashboardContent from './EnhancedDashboardContent';
+import EmployeeProgressTracking from './EmployeeProgressTracking';
 
 function PortalAdminDashboard({ onCreateEmployee }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -48,6 +49,7 @@ function PortalAdminDashboard({ onCreateEmployee }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: FaHome },
     { id: 'employees', label: 'Employees', icon: FaUsers },
+    { id: 'progress', label: 'Progress Tracking', icon: FaChartBar },
     { id: 'courses', label: 'Courses', icon: FaGraduationCap },
     { id: 'analytics', label: 'Analytics', icon: FaChartBar },
     { id: 'settings', label: 'Settings', icon: FaCog },
@@ -176,6 +178,8 @@ function PortalAdminDashboard({ onCreateEmployee }) {
         return <EnhancedDashboardContent />;
       case 'employees':
         return <EmployeesContent key={employeeListRefresh} />;
+      case 'progress':
+        return <EmployeeProgressTracking />;
       case 'courses':
         return <PortalAdminCourses />;
       case 'analytics':

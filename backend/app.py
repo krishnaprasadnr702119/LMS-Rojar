@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_mail import Mail, Message
 from dotenv import load_dotenv
@@ -9,14 +9,149 @@ import subprocess
 import json
 import bcrypt
 import jwt
+import mimetypes
 from datetime import datetime
 from sqlalchemy import extract, func, case
 from models import db, User, Organization, Course, Module, ModuleContent, QuizQuestion, QuizOption, Task, organization_courses, CourseRequest, CourseProgress, SystemSettings, AuditLog, EmailTemplate, SystemAnnouncement, UserSession, PageView, QuizAttempt, ContentInteraction, CourseEnrollment, SystemMetrics, EmailMetrics, FeatureUsage, APIUsage
+from content_tracking import register_content_tracking_routes
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
+
+@app.route('/api/employee/module_progress', methods=['GET'])
+def get_module_progress():
+    try:
+        username = request.args.get('username')
+        module_id = request.args.get('module_id')
+        
+        if not username or not module_id:
+            return jsonify({'success': False, 'error': 'Username and module_id are required'}), 400
+        
+        # Get user (using User model instead of Employee)
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        # Get module
+        module = Module.query.get(module_id)
+        if not module:
+            return jsonify({'success': False, 'error': 'Module not found'}), 404
+        
+        # Get or create progress record for the course
+        progress = CourseProgress.query.filter_by(
+            user_id=user.id,
+            course_id=module.course_id
+        ).first()
+        
+        if not progress:
+            progress = CourseProgress(
+                user_id=user.id,
+                course_id=module.course_id,
+                completed_modules=0,
+                total_modules=len(module.course.modules),
+                progress_percentage=0.0,
+                module_progress='{}'
+            )
+            db.session.add(progress)
+            db.session.commit()
+        
+        # Parse module progress JSON
+        import json
+        try:
+            module_progress_data = json.loads(progress.module_progress or '{}')
+        except:
+            module_progress_data = {}
+        
+        # Get this module's progress
+        module_key = str(module_id)
+        module_data = module_progress_data.get(module_key, {
+            'completed': False,
+            'completion_date': None
+        })
+        
+        return jsonify({
+            'success': True,
+            'progress': {
+                'completed': module_data.get('completed', False),
+                'progress_percentage': 100.0 if module_data.get('completed', False) else 0.0,
+                'completion_date': module_data.get('completion_date')
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting module progress: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Register content tracking routes
+register_content_tracking_routes(app)
+
+@app.route('/api/check_file_exists', methods=['GET'])
+def check_file_exists():
+    """Check if a file exists on the server"""
+    try:
+        file_path = request.args.get('path')
+        if not file_path:
+            return jsonify({'success': False, 'error': 'File path is required'}), 400
+        
+        # Check if file exists
+        full_path = os.path.join(file_path)
+        exists = os.path.exists(full_path)
+        
+        response_data = {
+            'success': True,
+            'exists': exists,
+            'path': file_path
+        }
+        
+        if exists:
+            try:
+                # Get file stats
+                stat = os.stat(full_path)
+                response_data.update({
+                    'file_size': stat.st_size,
+                    'modified_time': datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+                
+                # Try to determine MIME type
+                import mimetypes
+                mime_type, _ = mimetypes.guess_type(full_path)
+                if mime_type:
+                    response_data['mime_type'] = mime_type
+                    
+                    # Additional checks for video files
+                    if mime_type.startswith('video/'):
+                        response_data['is_valid_video'] = True
+                        response_data['video_type'] = mime_type
+                    elif file_path.lower().endswith(('.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm')):
+                        response_data['is_valid_video'] = True
+                        response_data['video_type'] = 'video file'
+                    else:
+                        response_data['is_valid_video'] = False
+                        
+            except Exception as e:
+                print(f"Error getting file stats: {e}")
+        else:
+            # If file doesn't exist, try to suggest alternatives
+            dir_path = os.path.dirname(full_path)
+            if os.path.exists(dir_path):
+                try:
+                    available_files = []
+                    for filename in os.listdir(dir_path):
+                        file_full_path = os.path.join(dir_path, filename)
+                        if os.path.isfile(file_full_path):
+                            available_files.append(filename)
+                    
+                    response_data['available_files'] = available_files[:10]  # Limit to 10 files
+                except:
+                    pass
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"Error checking file: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def verify_password(stored_password, provided_password):
     """Verify a stored password against provided password."""
@@ -106,7 +241,14 @@ def unassign_course_from_employee():
         return jsonify({'error': f'Failed to unassign course: {str(e)}'}), 500
 
 # Initialize CORS
-CORS(app)
+CORS(app, resources={
+    r"/api/*": {"origins": "*"},
+    r"/uploads/*": {
+        "origins": "*",
+        "methods": ["GET", "HEAD", "OPTIONS"],
+        "allow_headers": ["Range", "Content-Type", "Authorization"]
+    }
+})
 
 # Database configuration
 DB_HOST = os.getenv('DB_HOST', 'localhost')
@@ -147,6 +289,61 @@ mail = Mail(app)
 @app.route('/api/hello')
 def hello():
     return jsonify({'message': 'Hello from the Python backend!', 'status': 'success'})
+
+# Static file serving for uploads
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    """Serve uploaded files (videos, PDFs, etc.)"""
+    try:
+        print(f"Serving file: {filename}")
+        response = send_from_directory('uploads', filename)
+        
+        # Add specific headers for video streaming
+        if filename.lower().endswith(('.mp4', '.webm', '.ogg', '.avi', '.mov')):
+            response.headers['Accept-Ranges'] = 'bytes'
+            response.headers['Content-Type'] = 'video/mp4'
+            
+        print(f"File served successfully: {filename}")
+        return response
+    except Exception as e:
+        print(f"Error serving file {filename}: {e}")
+        return jsonify({'error': 'File not found'}), 404
+
+@app.route('/test_video')
+def test_video():
+    """Simple test page for video"""
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head><title>Video Test</title></head>
+    <body>
+        <h1>Video Test</h1>
+        <video controls width="500" height="300">
+            <source src="/uploads/courses/7/modules/7/Phishing_Explained_In_6_Minutes___What_Is_A_Phishing_Attack____Phishing_Attack___Simplilearn.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+        <p>Direct link: <a href="/uploads/courses/7/modules/7/Phishing_Explained_In_6_Minutes___What_Is_A_Phishing_Attack____Phishing_Attack___Simplilearn.mp4" target="_blank">Click here</a></p>
+    </body>
+    </html>
+    '''
+
+@app.route('/api/test_video_url', methods=['GET'])
+def test_video_url():
+    """Test endpoint to verify video URL construction"""
+    file_path = request.args.get('path', '')
+    full_url = f"http://localhost:5000/{file_path}"
+    
+    # Check if file exists
+    import os
+    file_exists = os.path.exists(file_path) if file_path else False
+    
+    return jsonify({
+        'success': True,
+        'original_path': file_path,
+        'full_url': full_url,
+        'file_exists': file_exists,
+        'message': 'Video URL test endpoint'
+    })
 
 @app.route('/api/portal_admin/course_assignments/<int:course_id>', methods=['GET'])
 def get_course_assignments(course_id):
@@ -1847,6 +2044,201 @@ def create_employee():
         traceback.print_exc()
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
+@app.route('/api/portal_admin/employee_progress', methods=['GET'])
+def get_employee_progress():
+    """Get detailed progress for all employees in portal admin's organization"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+        
+        # Find the portal admin user
+        portal_admin = User.query.filter_by(username=username, role='portal_admin').first()
+        if not portal_admin:
+            return jsonify({'error': 'Portal admin not found'}), 404
+            
+        if not portal_admin.org_id:
+            return jsonify({'error': 'Portal admin not associated with an organization'}), 404
+        
+        # Get organization
+        organization = db.session.get(Organization, portal_admin.org_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+        
+        # Get all employees in the organization
+        employees = User.query.filter_by(org_id=portal_admin.org_id, role='employee').all()
+        
+        employee_progress = []
+        for employee in employees:
+            # Get all course progress for this employee
+            progress_records = CourseProgress.query.filter_by(user_id=employee.id).all()
+            
+            # Calculate overall metrics
+            total_courses = len(employee.courses)
+            completed_courses = len([p for p in progress_records if p.progress_percentage == 100.0])
+            avg_progress = sum([p.progress_percentage for p in progress_records]) / len(progress_records) if progress_records else 0
+            
+            # Calculate risk score (higher = more at risk)
+            risk_score = 0
+            if progress_records:
+                # Risk factors: low completion rate, no recent activity, low quiz scores
+                completion_rate = completed_courses / total_courses if total_courses > 0 else 0
+                
+                # Check for recent activity (last 7 days)
+                from datetime import datetime, timedelta, timezone
+                cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+                # Convert cutoff to naive datetime for comparison with database datetime
+                cutoff_date_naive = cutoff_date.replace(tzinfo=None)
+                
+                recent_activity = any(
+                    p.last_activity and p.last_activity > cutoff_date_naive
+                    for p in progress_records
+                )
+                
+                # Calculate risk score (0-100)
+                risk_score = max(0, min(100, int(
+                    (1 - completion_rate) * 40 +  # 40 points for low completion
+                    (0 if recent_activity else 30) +  # 30 points for no recent activity
+                    (avg_progress < 50) * 30  # 30 points for low average progress
+                )))
+            
+            # Get course-specific progress
+            course_progress = []
+            for progress in progress_records:
+                course_progress.append({
+                    'course_id': progress.course_id,
+                    'course_title': progress.course.title,
+                    'progress_percentage': progress.progress_percentage,
+                    'completed_modules': progress.completed_modules,
+                    'total_modules': progress.total_modules,
+                    'last_activity': progress.last_activity.strftime('%Y-%m-%d %H:%M:%S') if progress.last_activity else None,
+                    'completion_date': progress.completion_date.strftime('%Y-%m-%d %H:%M:%S') if progress.completion_date else None,
+                    'risk_score': progress.risk_score
+                })
+            
+            employee_progress.append({
+                'employee_id': employee.id,
+                'employee_name': employee.username,
+                'employee_email': employee.email,
+                'designation': employee.designation,
+                'total_courses': total_courses,
+                'completed_courses': completed_courses,
+                'average_progress': round(avg_progress, 1),
+                'overall_risk_score': risk_score,
+                'course_progress': course_progress
+            })
+        
+        return jsonify({
+            'success': True,
+            'organization': {
+                'id': organization.id,
+                'name': organization.name
+            },
+            'employee_progress': employee_progress,
+            'summary': {
+                'total_employees': len(employees),
+                'employees_at_risk': len([e for e in employee_progress if e['overall_risk_score'] > 60]),
+                'average_completion_rate': round(
+                    sum([e['completed_courses'] / max(e['total_courses'], 1) for e in employee_progress]) / len(employee_progress) * 100, 1
+                ) if employee_progress else 0
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error in get_employee_progress: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/organization_progress', methods=['GET'])
+def get_organization_progress():
+    """Get progress overview for all organizations (Admin view)"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+        
+        # Verify admin role
+        admin_user = User.query.filter_by(username=username, role='admin').first()
+        if not admin_user:
+            return jsonify({'error': 'Admin user not found'}), 404
+        
+        # Get all organizations
+        organizations = Organization.query.all()
+        
+        org_progress = []
+        for org in organizations:
+            # Get all employees in this organization
+            employees = User.query.filter_by(org_id=org.id, role='employee').all()
+            
+            if not employees:
+                org_progress.append({
+                    'organization_id': org.id,
+                    'organization_name': org.name,
+                    'total_employees': 0,
+                    'employees_at_risk': 0,
+                    'average_completion_rate': 0,
+                    'total_courses_assigned': len(org.courses),
+                    'high_risk_employees': []
+                })
+                continue
+            
+            # Calculate organization-wide metrics
+            total_progress_records = []
+            high_risk_employees = []
+            
+            for employee in employees:
+                progress_records = CourseProgress.query.filter_by(user_id=employee.id).all()
+                total_progress_records.extend(progress_records)
+                
+                # Calculate employee risk
+                total_courses = len(employee.courses)
+                completed_courses = len([p for p in progress_records if p.progress_percentage == 100.0])
+                completion_rate = completed_courses / total_courses if total_courses > 0 else 0
+                
+                if completion_rate < 0.3 or not progress_records:  # High risk threshold
+                    high_risk_employees.append({
+                        'employee_id': employee.id,
+                        'employee_name': employee.username,
+                        'employee_email': employee.email,
+                        'designation': employee.designation,
+                        'completion_rate': round(completion_rate * 100, 1),
+                        'courses_assigned': total_courses,
+                        'courses_completed': completed_courses
+                    })
+            
+            # Calculate averages
+            avg_completion = 0
+            if total_progress_records:
+                completed_count = len([p for p in total_progress_records if p.progress_percentage == 100.0])
+                avg_completion = (completed_count / len(total_progress_records)) * 100
+            
+            org_progress.append({
+                'organization_id': org.id,
+                'organization_name': org.name,
+                'total_employees': len(employees),
+                'employees_at_risk': len(high_risk_employees),
+                'average_completion_rate': round(avg_completion, 1),
+                'total_courses_assigned': len(org.courses),
+                'high_risk_employees': high_risk_employees[:5]  # Top 5 at-risk employees
+            })
+        
+        return jsonify({
+            'success': True,
+            'organization_progress': org_progress,
+            'overall_summary': {
+                'total_organizations': len(organizations),
+                'total_employees': sum([len(User.query.filter_by(org_id=org.id, role='employee').all()) for org in organizations]),
+                'organizations_with_high_risk': len([org for org in org_progress if org['employees_at_risk'] > 0])
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error in get_organization_progress: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 @app.route('/api/portal_admin/all_courses', methods=['GET'])
 def get_portal_admin_courses():
     """Get all courses and assigned courses for a portal admin's organization"""
@@ -2935,10 +3327,38 @@ def submit_employee_quiz():
             'question_results': question_results
         }
         
+        # Auto-complete module if quiz is passed
+        module_auto_completed = False
+        if passed:
+            try:
+                # Record quiz completion interaction
+                from content_tracking import track_content_interaction_internal
+                
+                quiz_interaction_data = {
+                    'score': correct_answers,
+                    'total_questions': total_questions,
+                    'percentage': percentage,
+                    'passed': passed,
+                    'completion_date': datetime.now().isoformat()
+                }
+                
+                # Track the quiz completion
+                interaction_response = track_content_interaction_internal(
+                    username, content_id, 'quiz_completed', quiz_interaction_data
+                )
+                
+                if 'module_auto_completed' in interaction_response.get_json():
+                    module_auto_completed = True
+                    
+            except Exception as e:
+                print(f"Error auto-completing module after quiz: {str(e)}")
+        
         return jsonify({
             'success': True,
             'results': results,
-            'message': f'Quiz submitted successfully! Score: {correct_answers}/{total_questions} ({percentage:.1f}%)'
+            'module_auto_completed': module_auto_completed,
+            'message': f'Quiz submitted successfully! Score: {correct_answers}/{total_questions} ({percentage:.1f}%)' + 
+                      (' - Module automatically completed!' if module_auto_completed else '')
         }), 200
         
     except Exception as e:

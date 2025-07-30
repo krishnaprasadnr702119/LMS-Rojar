@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Test</title>
+</head>
+<body>
+    <h1>Video Serving Test</h1>
+    
+    <h2>Direct HTML5 Video Element</h2>
+    <video 
+        controls 
+        width="400" 
+        height="300"
+        src="http://localhost:5000/uploads/courses/7/modules/7/Phishing_Explained_In_6_Minutes___What_Is_A_Phishing_Attack____Phishing_Attack___Simplilearn.mp4"
+    >
+        Your browser does not support the video tag.
+    </video>
+    
+    <h2>Video Info</h2>
+    <p><strong>URL:</strong> http://localhost:5000/uploads/courses/7/modules/7/Phishing_Explained_In_6_Minutes___What_Is_A_Phishing_Attack____Phishing_Attack___Simplilearn.mp4</p>
+    
+    <script>
+        // Test fetch
+        fetch('http://localhost:5000/uploads/courses/7/modules/7/Phishing_Explained_In_6_Minutes___What_Is_A_Phishing_Attack____Phishing_Attack___Simplilearn.mp4')
+            .then(response => {
+                console.log('Fetch Response:', response);
+                console.log('Status:', response.status);
+                console.log('Headers:', [...response.headers.entries()]);
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+            });
+    </script>
+</body>
+</html>
