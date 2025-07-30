@@ -10,7 +10,8 @@ import {
   FaTimes,
   FaVideo,
   FaFilePdf,
-  FaQuestionCircle
+  FaQuestionCircle,
+  FaChartLine
 } from 'react-icons/fa';
 
 function EmployeeDashboard() {
@@ -20,6 +21,8 @@ function EmployeeDashboard() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [progressData, setProgressData] = useState(null);
+  const [coursesFetched, setCoursesFetched] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,32 +33,30 @@ function EmployeeDashboard() {
     }
   }, []);
   
-  // Always fetch courses when userInfo is set, and also when switching to courses tab
+  // Fetch courses when userInfo is set
   useEffect(() => {
-    if (userInfo?.username) {
+    if (userInfo?.username && !coursesFetched) {
       fetchCourses();
     }
-  }, [userInfo]);
+  }, [userInfo, coursesFetched]);
 
+  // Handle section-specific data fetching
   useEffect(() => {
-    if (activeSection === 'courses' && userInfo?.username) {
-      fetchCourses();
+    if (activeSection === 'progress' && userInfo?.username && courses.length > 0) {
+      fetchProgressData();
     }
-    // Reset error and courses when switching away from courses
-    if (activeSection !== 'courses') {
-      setCourses([]);
-      setError(null);
-    }
-  }, [activeSection, userInfo]);
+  }, [activeSection, courses]);
   
   const fetchCourses = async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch(`/api/employee/my_courses?username=${userInfo.username}`);
       const data = await response.json();
       
       if (data.success) {
         setCourses(data.courses);
+        setCoursesFetched(true);
       } else {
         setError(data.error || 'Failed to fetch courses');
       }
@@ -64,6 +65,33 @@ function EmployeeDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchProgressData = () => {
+    // Create mock progress data based on current courses
+    const totalCourses = courses.length;
+    const completedCourses = courses.filter(course => course.progress >= 100).length;
+    const inProgressCourses = courses.filter(course => course.progress > 0 && course.progress < 100).length;
+    const totalModules = courses.reduce((sum, course) => sum + (course.modules?.length || 0), 0);
+    const completedModules = courses.reduce((sum, course) => 
+      sum + (course.modules?.filter(module => module.completed).length || 0), 0);
+    
+    setProgressData({
+      totalCourses,
+      completedCourses,
+      inProgressCourses,
+      totalModules,
+      completedModules,
+      averageProgress: totalCourses > 0 ? Math.round(courses.reduce((sum, course) => sum + (course.progress || 0), 0) / totalCourses) : 0,
+      totalLearningHours: Math.round(completedModules * 1.5), // Assume 1.5 hours per module
+      streakDays: Math.floor(Math.random() * 7) + 1, // Mock streak
+      recentActivity: courses.slice(0, 3).map(course => ({
+        type: 'course_progress',
+        title: course.title,
+        progress: course.progress || 0,
+        date: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString()
+      }))
+    });
   };
 
   const handleLogout = () => {
@@ -125,11 +153,28 @@ function EmployeeDashboard() {
         }}>
           <h3 style={{ margin: '0 0 10px 0' }}>Error</h3>
           <p>{error}</p>
+          <button 
+            onClick={() => {
+              setCoursesFetched(false);
+              setError(null);
+            }}
+            style={{
+              marginTop: '16px',
+              padding: '8px 16px',
+              background: '#dc2626',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
         </div>
       );
     }
 
-    if (courses.length === 0) {
+    if (coursesFetched && courses.length === 0) {
       return (
         <div style={{ 
           background: '#f9fafb',
@@ -141,8 +186,25 @@ function EmployeeDashboard() {
           maxWidth: '800px',
           margin: '40px auto'
         }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
           <h3 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>No courses assigned yet</h3>
-          <p>Courses assigned to you will appear here.</p>
+          <p style={{ margin: '0 0 16px 0' }}>Courses assigned to you will appear here.</p>
+          <button 
+            onClick={() => {
+              setCoursesFetched(false);
+              setError(null);
+            }}
+            style={{
+              padding: '8px 16px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Refresh
+          </button>
         </div>
       );
     }
@@ -386,6 +448,205 @@ function EmployeeDashboard() {
     );
   };
 
+  const renderProgressSection = () => {
+    if (!progressData) {
+      return (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          color: '#6b7280'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+          <h3 style={{ fontSize: '18px', margin: '0 0 8px 0' }}>No Progress Data</h3>
+          <p style={{ margin: 0 }}>Complete the "My Courses" section first to see your progress analytics.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ padding: '0 20px' }}>
+        {/* Overview Stats */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '20px',
+          marginBottom: '32px'
+        }}>
+          {[
+            { title: 'Total Courses', value: progressData.totalCourses, icon: '📚', color: '#3b82f6' },
+            { title: 'Completed', value: progressData.completedCourses, icon: '✅', color: '#10b981' },
+            { title: 'In Progress', value: progressData.inProgressCourses, icon: '⏳', color: '#f59e0b' },
+            { title: 'Learning Hours', value: `${progressData.totalLearningHours}h`, icon: '⏰', color: '#8b5cf6' }
+          ].map((stat, index) => (
+            <div key={index} style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '20px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: `2px solid ${stat.color}20`,
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>{stat.icon}</div>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: stat.color, marginBottom: '4px' }}>
+                {stat.value}
+              </div>
+              <div style={{ fontSize: '14px', color: '#6b7280' }}>{stat.title}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress Charts */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+          gap: '24px',
+          marginBottom: '32px'
+        }}>
+          {/* Course Completion Chart */}
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', marginBottom: '20px' }}>
+              Overall Progress
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '150px' }}>
+              <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+                <div style={{
+                  width: '120px',
+                  height: '120px',
+                  borderRadius: '50%',
+                  background: `conic-gradient(#10b981 0deg ${(progressData.averageProgress / 100) * 360}deg, #e5e7eb ${(progressData.averageProgress / 100) * 360}deg 360deg)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    borderRadius: '50%',
+                    background: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{ fontSize: '20px', fontWeight: '700', color: '#10b981' }}>
+                      {progressData.averageProgress}%
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#6b7280' }}>Complete</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Learning Stats */}
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', marginBottom: '20px' }}>
+              Learning Statistics
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '16px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>
+                  {progressData.completedModules}/{progressData.totalModules}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Modules Completed</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
+                  {progressData.streakDays}
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>Day Streak</div>
+              </div>
+            </div>
+            <div style={{
+              width: '100%',
+              height: '8px',
+              background: '#e5e7eb',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              marginTop: '16px'
+            }}>
+              <div style={{
+                width: `${progressData.totalModules > 0 ? (progressData.completedModules / progressData.totalModules) * 100 : 0}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                transition: 'width 0.5s ease'
+              }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', marginBottom: '20px' }}>
+            Recent Learning Activity
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {progressData.recentActivity?.length > 0 ? (
+              progressData.recentActivity.map((activity, index) => (
+                <div key={index} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '12px',
+                  background: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  <div style={{ marginRight: '12px', fontSize: '20px' }}>📚</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                      {activity.title}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      Progress: {activity.progress}% • {new Date(activity.date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: '60px',
+                    height: '4px',
+                    background: '#e5e7eb',
+                    borderRadius: '2px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${activity.progress}%`,
+                      height: '100%',
+                      background: activity.progress === 100 ? '#10b981' : '#3b82f6'
+                    }} />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📝</div>
+                <div>No recent activity</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ 
       display: 'flex',
@@ -456,6 +717,7 @@ function EmployeeDashboard() {
           {[
             { id: 'dashboard', label: 'Dashboard', icon: FaHome },
             { id: 'courses', label: 'My Courses', icon: FaBook },
+            { id: 'progress', label: 'Progress Tracking', icon: FaChartLine },
             { id: 'profile', label: 'Profile', icon: FaUser },
           ].map((item) => (
             <div
@@ -630,17 +892,100 @@ function EmployeeDashboard() {
 
         {activeSection === 'courses' && (
           <div>
-            <h1 style={{
-              fontSize: '24px',
-              fontWeight: '700',
-              color: '#1e293b',
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
               margin: '0 0 24px 0',
               padding: '0 20px'
             }}>
-              <FaBook style={{ marginRight: '12px', verticalAlign: 'middle' }} />
-              My Courses
-            </h1>
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                style={{
+                  background: 'none',
+                  border: '2px solid #3b82f6',
+                  color: '#3b82f6',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#3b82f6';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'none';
+                  e.currentTarget.style.color = '#3b82f6';
+                }}
+              >
+                ← Back
+              </button>
+              <h1 style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#1e293b',
+                margin: 0
+              }}>
+                <FaBook style={{ marginRight: '12px', verticalAlign: 'middle' }} />
+                My Courses
+              </h1>
+            </div>
             {renderCoursesSection()}
+          </div>
+        )}
+
+        {activeSection === 'progress' && (
+          <div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              margin: '0 0 24px 0',
+              padding: '0 20px'
+            }}>
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                style={{
+                  background: 'none',
+                  border: '2px solid #3b82f6',
+                  color: '#3b82f6',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#3b82f6';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'none';
+                  e.currentTarget.style.color = '#3b82f6';
+                }}
+              >
+                ← Back
+              </button>
+              <h1 style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#1e293b',
+                margin: 0
+              }}>
+                📈 Progress Tracking
+              </h1>
+            </div>
+            {renderProgressSection()}
           </div>
         )}
 
@@ -653,15 +998,49 @@ function EmployeeDashboard() {
             margin: '0 auto',
             boxShadow: '0 4px 16px rgba(0,0,0,0.08)'
           }}>
-            <h1 style={{
-              fontSize: '24px',
-              fontWeight: '700',
-              color: '#1e293b',
-              margin: '0 0 24px 0'
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              marginBottom: '24px'
             }}>
-              <FaUser style={{ marginRight: '12px', verticalAlign: 'middle' }} />
-              Profile Settings
-            </h1>
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                style={{
+                  background: 'none',
+                  border: '2px solid #3b82f6',
+                  color: '#3b82f6',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#3b82f6';
+                  e.currentTarget.style.color = 'white';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'none';
+                  e.currentTarget.style.color = '#3b82f6';
+                }}
+              >
+                ← Back
+              </button>
+              <h1 style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#1e293b',
+                margin: 0
+              }}>
+                <FaUser style={{ marginRight: '12px', verticalAlign: 'middle' }} />
+                Profile Settings
+              </h1>
+            </div>
             
             {userInfo && (
               <div>
