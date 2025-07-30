@@ -35,13 +35,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      VITE_API_URL: http://backend:5000/api
+      VITE_API_URL: http://backend:5000
     depends_on:
       - backend
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-    command: npm run dev -- --host
+    command: npm run dev -- --host --port 3000
 volumes:
   db_data:

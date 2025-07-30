@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { FaPlus, FaEdit, FaTrash, FaVideo, FaFilePdf, FaQuestionCircle, FaChevronRight, FaRegCheckCircle } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../components/Loader';
+import QuizManager from '../components/QuizManager';
 
 function CourseList() {
   const navigate = useNavigate();
@@ -64,6 +65,21 @@ function CourseList() {
   const [viewingContent, setViewingContent] = useState(null);
   const [showContentViewer, setShowContentViewer] = useState(false);
   const [showQuizViewer, setShowQuizViewer] = useState(false);
+  
+  // Quiz Manager
+  const [selectedContent, setSelectedContent] = useState(null);
+  const [showQuizManager, setShowQuizManager] = useState(false);
+  
+  // Course editing
+  const [showEditCourseModal, setShowEditCourseModal] = useState(false);
+  const [editingCourse, setEditingCourse] = useState(null);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    status: 'draft'
+  });
+  const [editFormError, setEditFormError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
   
   // Refs
   const fileInputRef = useRef(null);
@@ -414,6 +430,90 @@ function CourseList() {
       setShowQuizViewer(true);
     } else {
       setShowContentViewer(true);
+    }
+  };
+
+  const handleEditQuiz = (content) => {
+    setSelectedContent(content);
+    setShowQuizManager(true);
+  };
+
+  const handleDeleteContent = async (contentId) => {
+    if (!window.confirm('Are you sure you want to delete this content?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/contents/${contentId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh the course details
+        fetchCourseDetails(selectedCourse);
+      } else {
+        alert(data.message || 'Failed to delete content');
+      }
+    } catch (err) {
+      alert('Failed to delete content');
+      console.error('Error deleting content:', err);
+    }
+  };
+
+  const handleEditCourse = (course) => {
+    setEditingCourse(course);
+    setEditForm({
+      title: course.title,
+      description: course.description || '',
+      status: course.status
+    });
+    setEditFormError('');
+    setShowEditCourseModal(true);
+  };
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm(f => ({ ...f, [name]: value }));
+  };
+
+  const handleUpdateCourse = async (e) => {
+    e.preventDefault();
+    setEditFormError('');
+    setEditSubmitting(true);
+
+    // Validate required fields
+    if (!editForm.title.trim()) {
+      setEditFormError('Course title is required.');
+      setEditSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/courses/${editingCourse.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setShowEditCourseModal(false);
+        setEditingCourse(null);
+        setEditForm({ title: '', description: '', status: 'draft' });
+        fetchCourses(); // Refresh the courses list
+      } else {
+        setEditFormError(data.message || 'Failed to update course');
+      }
+    } catch (err) {
+      setEditFormError('Failed to update course');
+      console.error('Error updating course:', err);
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -819,6 +919,249 @@ function CourseList() {
         </div>
       )}
 
+      {/* Edit Course Modal */}
+      {showEditCourseModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(15,23,42,0.65)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          <form
+            onSubmit={handleUpdateCourse}
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+              padding: 36,
+              minWidth: 360,
+              maxWidth: '90vw',
+              width: 420,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 22,
+              position: 'relative',
+              animation: 'slideUp 0.3s ease-out',
+              border: '1px solid rgba(226,232,240,0.8)',
+            }}
+          >
+            <h3 style={{ 
+              margin: 0, 
+              color: '#1e40af', 
+              fontWeight: 800, 
+              fontSize: 24, 
+              position: 'relative',
+              paddingBottom: 14,
+              marginBottom: 5
+            }}>
+              Edit Course
+              <div style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                width: 40,
+                height: 4,
+                background: 'linear-gradient(90deg, #3b82f6, #1e40af)',
+                borderRadius: 2
+              }}></div>
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontWeight: 600, color: '#334155', fontSize: 15 }}>
+                Course Title*
+              </label>
+              <input 
+                name="title" 
+                value={editForm.title} 
+                onChange={handleEditFormChange} 
+                required 
+                placeholder="Enter course title"
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1px solid #e2e8f0', 
+                  fontSize: 15,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = '#93c5fd';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontWeight: 600, color: '#334155', fontSize: 15 }}>
+                Description
+              </label>
+              <textarea
+                name="description" 
+                value={editForm.description} 
+                onChange={handleEditFormChange}
+                placeholder="Enter course description"
+                rows={4}
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1px solid #e2e8f0', 
+                  fontSize: 15,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                  resize: 'vertical'
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = '#93c5fd';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ fontWeight: 600, color: '#334155', fontSize: 15 }}>
+                Status*
+              </label>
+              <select 
+                name="status" 
+                value={editForm.status} 
+                onChange={handleEditFormChange} 
+                required 
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1px solid #e2e8f0', 
+                  fontSize: 15,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s',
+                  outline: 'none',
+                  appearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2364748b\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '16px',
+                  cursor: 'pointer'
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = '#93c5fd';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)';
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
+                }}
+              >
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+
+            {editFormError && (
+              <div style={{ 
+                color: '#ef4444', 
+                fontWeight: 600, 
+                background: '#fee2e2', 
+                padding: '10px 14px', 
+                borderRadius: 8,
+                fontSize: 14,
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: 8}}>
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                {editFormError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 8, justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowEditCourseModal(false);
+                  setEditingCourse(null);
+                  setEditForm({ title: '', description: '', status: 'draft' });
+                  setEditFormError('');
+                }} 
+                style={{ 
+                  padding: '10px 18px', 
+                  borderRadius: 10, 
+                  border: '1px solid #e2e8f0', 
+                  background: 'white', 
+                  color: '#475569', 
+                  fontWeight: 600, 
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                onMouseOver={e => {
+                  e.currentTarget.style.background = '#f8fafc';
+                  e.currentTarget.style.borderColor = '#cbd5e1';
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.background = 'white';
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={editSubmitting} 
+                style={{ 
+                  padding: '10px 24px', 
+                  borderRadius: 10, 
+                  border: 'none', 
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)',
+                  color: '#fff', 
+                  fontWeight: 700, 
+                  cursor: editSubmitting ? 'not-allowed' : 'pointer', 
+                  opacity: editSubmitting ? 0.7 : 1,
+                  boxShadow: '0 4px 12px rgba(37,99,235,0.2)',
+                  fontSize: 15,
+                  transition: 'all 0.2s',
+                }}
+                onMouseOver={e => {
+                  if (!editSubmitting) {
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(37,99,235,0.25)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseOut={e => {
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.2)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                {editSubmitting ? 'Updating...' : 'Update Course'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Module Creation Modal */}
       {showModuleModal && (
         <div style={{
@@ -1143,7 +1486,7 @@ function CourseList() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Handle edit course - you can implement this
+                          handleEditCourse(course);
                         }}
                         style={{
                           background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
@@ -1518,24 +1861,89 @@ function CourseList() {
                                     {content.content_type.charAt(0).toUpperCase() + content.content_type.slice(1)}
                                   </div>
                                 </div>
-                                <button
-                                  style={{
-                                    background: '#f1f5f9',
-                                    color: '#475569',
-                                    border: 'none',
-                                    borderRadius: 6,
-                                    padding: '6px 10px',
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                  }}
-                                  onClick={() => {
-                                    // Handle edit content
-                                    alert(`Edit content: ${content.title}`);
-                                  }}
-                                >
-                                  Edit
-                                </button>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  {/* View Button */}
+                                  <button
+                                    style={{
+                                      background: '#e0f2fe',
+                                      color: '#0891b2',
+                                      border: 'none',
+                                      borderRadius: 6,
+                                      padding: '6px 10px',
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                    }}
+                                    onClick={() => handleViewContent(content)}
+                                    onMouseOver={e => {
+                                      e.currentTarget.style.background = '#0891b2';
+                                      e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseOut={e => {
+                                      e.currentTarget.style.background = '#e0f2fe';
+                                      e.currentTarget.style.color = '#0891b2';
+                                    }}
+                                  >
+                                    View
+                                  </button>
+                                  
+                                  {/* Edit Quiz Button - Only for quizzes */}
+                                  {content.content_type === 'quiz' && (
+                                    <button
+                                      style={{
+                                        background: '#fef3c7',
+                                        color: '#d97706',
+                                        border: 'none',
+                                        borderRadius: 6,
+                                        padding: '6px 10px',
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                      }}
+                                      onClick={() => handleEditQuiz(content)}
+                                      onMouseOver={e => {
+                                        e.currentTarget.style.background = '#d97706';
+                                        e.currentTarget.style.color = 'white';
+                                      }}
+                                      onMouseOut={e => {
+                                        e.currentTarget.style.background = '#fef3c7';
+                                        e.currentTarget.style.color = '#d97706';
+                                      }}
+                                    >
+                                      <FaEdit style={{ marginRight: '4px' }} />
+                                      Edit Quiz
+                                    </button>
+                                  )}
+                                  
+                                  {/* Delete Button */}
+                                  <button
+                                    style={{
+                                      background: '#fee2e2',
+                                      color: '#dc2626',
+                                      border: 'none',
+                                      borderRadius: 6,
+                                      padding: '6px 10px',
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                    }}
+                                    onClick={() => handleDeleteContent(content.id)}
+                                    onMouseOver={e => {
+                                      e.currentTarget.style.background = '#dc2626';
+                                      e.currentTarget.style.color = 'white';
+                                    }}
+                                    onMouseOut={e => {
+                                      e.currentTarget.style.background = '#fee2e2';
+                                      e.currentTarget.style.color = '#dc2626';
+                                    }}
+                                  >
+                                    <FaTrash style={{ marginRight: '4px' }} />
+                                    Delete
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -2318,6 +2726,17 @@ function CourseList() {
             </div>
           </form>
         </div>
+      )}
+
+      {/* Quiz Manager Modal */}
+      {showQuizManager && selectedContent && (
+        <QuizManager
+          contentId={selectedContent.id}
+          onClose={() => {
+            setShowQuizManager(false);
+            setSelectedContent(null);
+          }}
+        />
       )}
     </div>
   );

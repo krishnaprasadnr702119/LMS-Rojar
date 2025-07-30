@@ -109,9 +109,13 @@ function PortalAdminDashboard({ onCreateEmployee }) {
     }
     setEmployeeSubmitting(true);
     try {
+      const token = getToken();
       const res = await fetch('/api/portal_admin/create_employee', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(employeeForm),
       });
       const data = await res.json();

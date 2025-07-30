@@ -1,0 +1,399 @@
+.analytics-dashboard {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: 100vh;
+}
+
+.analytics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.analytics-header h1 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 2rem;
+}
+
+.analytics-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.refresh-btn, .export-btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.refresh-btn {
+    background: #3498db;
+    color: white;
+}
+
+.refresh-btn:hover {
+    background: #2980b9;
+}
+
+.export-btn {
+    background: #27ae60;
+    color: white;
+}
+
+.export-btn:hover {
+    background: #229954;
+}
+
+.analytics-tabs {
+    display: flex;
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 15px 20px;
+    border: none;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-right: 1px solid #eee;
+    font-weight: 500;
+}
+
+.tab-btn:last-child {
+    border-right: none;
+}
+
+.tab-btn:hover {
+    background: #f8f9fa;
+}
+
+.tab-btn.active {
+    background: #3498db;
+    color: white;
+}
+
+.analytics-content {
+    background: white;
+    border-radius: 10px;
+    padding: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* Overview Styles */
+.analytics-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.metric-card:nth-child(2) {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.metric-card:nth-child(3) {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.metric-card:nth-child(4) {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.metric-card h3 {
+    margin: 0 0 15px 0;
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.metric-sub {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.charts-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+}
+
+.chart-card {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.chart-card h3 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+}
+
+.activity-stats p {
+    margin: 10px 0;
+    padding: 10px;
+    background: white;
+    border-radius: 5px;
+    border-left: 4px solid #3498db;
+}
+
+/* Section Styles */
+.section {
+    margin-bottom: 30px;
+}
+
+.section h3 {
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+/* User Analytics Styles */
+.trends-list, .role-stats, .top-users, .login-patterns {
+    display: grid;
+    gap: 10px;
+}
+
+.trend-item, .role-item, .user-item, .pattern-item,
+.course-item, .completion-item, .time-item, .quiz-trend-item,
+.interaction-item, .learner-item, .view-item, .page-item,
+.api-item, .metric-item, .org-item, .assignment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #3498db;
+    transition: all 0.3s ease;
+}
+
+.trend-item:hover, .role-item:hover, .user-item:hover, .pattern-item:hover,
+.course-item:hover, .completion-item:hover, .time-item:hover, .quiz-trend-item:hover,
+.interaction-item:hover, .learner-item:hover, .view-item:hover, .page-item:hover,
+.api-item:hover, .metric-item:hover, .org-item:hover, .assignment-item:hover {
+    background: #e9ecef;
+    transform: translateX(5px);
+}
+
+/* Course Analytics Styles */
+.completion-item {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.course-name {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.completion-stats {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+.completion-stats span {
+    padding: 5px 10px;
+    background: #e9ecef;
+    border-radius: 15px;
+    font-size: 0.9rem;
+}
+
+.completion-stats .rate {
+    background: #27ae60;
+    color: white;
+    font-weight: bold;
+}
+
+/* System Analytics Styles */
+.api-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 15px;
+}
+
+.endpoint {
+    font-family: monospace;
+    background: #2c3e50;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.requests, .response-time {
+    text-align: center;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.requests {
+    background: #3498db;
+    color: white;
+}
+
+.response-time {
+    background: #e74c3c;
+    color: white;
+}
+
+/* Loading and Error States */
+.analytics-loading, .analytics-error {
+    text-align: center;
+    padding: 50px;
+    font-size: 1.2rem;
+    color: #666;
+}
+
+.analytics-error {
+    color: #e74c3c;
+    background: #fdf2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+}
+
+/* Coming Soon Styles */
+.coming-soon, .compliance-analytics {
+    text-align: center;
+    padding: 50px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 10px;
+}
+
+.coming-soon h3, .compliance-analytics h3 {
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+}
+
+.coming-soon p, .compliance-analytics p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .analytics-header {
+        flex-direction: column;
+        gap: 20px;
+        text-align: center;
+    }
+
+    .analytics-tabs {
+        flex-direction: column;
+    }
+
+    .tab-btn {
+        border-right: none;
+        border-bottom: 1px solid #eee;
+    }
+
+    .tab-btn:last-child {
+        border-bottom: none;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .charts-section {
+        grid-template-columns: 1fr;
+    }
+
+    .api-item {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .completion-stats {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .analytics-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .analytics-dashboard {
+        background: #1a1a1a;
+        color: #e0e0e0;
+    }
+
+    .analytics-header, .analytics-content {
+        background: #2d2d2d;
+        color: #e0e0e0;
+    }
+
+    .analytics-tabs {
+        background: #2d2d2d;
+    }
+
+    .tab-btn {
+        background: #2d2d2d;
+        color: #e0e0e0;
+        border-right-color: #404040;
+    }
+
+    .tab-btn:hover {
+        background: #404040;
+    }
+
+    .trend-item, .role-item, .user-item, .pattern-item,
+    .course-item, .completion-item, .time-item, .quiz-trend-item,
+    .interaction-item, .learner-item, .view-item, .page-item,
+    .api-item, .metric-item, .org-item, .assignment-item {
+        background: #404040;
+        color: #e0e0e0;
+    }
+
+    .chart-card {
+        background: #404040;
+        border-color: #555;
+        color: #e0e0e0;
+    }
+
+    .activity-stats p {
+        background: #2d2d2d;
+        color: #e0e0e0;
+    }
+}

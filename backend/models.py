@@ -126,3 +126,172 @@ class CourseProgress(db.Model):
     
     # Module progress (JSON field to store module completion status)
     module_progress = db.Column(db.Text, default='{}')  # JSON string: {module_id: {completed: true/false, completion_date: date}}
+
+class SystemSettings(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(50), nullable=False)  # email, security, organization, etc.
+    setting_key = db.Column(db.String(100), nullable=False)
+    setting_value = db.Column(db.Text, nullable=True)
+    data_type = db.Column(db.String(20), nullable=False, default='string')  # string, integer, boolean, json
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    
+    __table_args__ = (db.UniqueConstraint('category', 'setting_key', name='_category_key_uc'),)
+
+class AuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action = db.Column(db.String(100), nullable=False)
+    resource_type = db.Column(db.String(50), nullable=False)  # user, course, organization, etc.
+    resource_id = db.Column(db.Integer, nullable=True)
+    details = db.Column(db.Text, nullable=True)  # JSON string with additional details
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationship to user
+    user = db.relationship('User', backref='audit_logs')
+
+class EmailTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    template_name = db.Column(db.String(100), unique=True, nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    html_content = db.Column(db.Text, nullable=False)
+    text_content = db.Column(db.Text, nullable=True)
+    variables = db.Column(db.Text, nullable=True)  # JSON string of available variables
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class SystemAnnouncement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    announcement_type = db.Column(db.String(20), nullable=False, default='info')  # info, warning, critical
+    target_roles = db.Column(db.Text, nullable=True)  # JSON array of target roles
+    target_organizations = db.Column(db.Text, nullable=True)  # JSON array of organization IDs
+    is_active = db.Column(db.Boolean, default=True)
+    show_until = db.Column(db.DateTime, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationship to creator
+    creator = db.relationship('User', backref='announcements')
+
+# Analytics Models
+
+class UserSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    session_id = db.Column(db.String(100), nullable=False)
+    login_time = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    logout_time = db.Column(db.DateTime, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.Text, nullable=True)
+    location = db.Column(db.String(100), nullable=True)  # City, Country
+    session_duration_minutes = db.Column(db.Integer, nullable=True)
+    pages_visited = db.Column(db.Integer, default=0)
+    
+    # Relationship
+    user = db.relationship('User', backref='sessions')
+
+class PageView(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    session_id = db.Column(db.String(100), nullable=True)
+    page_url = db.Column(db.String(500), nullable=False)
+    page_title = db.Column(db.String(200), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    time_spent_seconds = db.Column(db.Integer, nullable=True)
+    referrer = db.Column(db.String(500), nullable=True)
+    
+    # Relationship
+    user = db.relationship('User', backref='page_views')
+
+class QuizAttempt(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    quiz_content_id = db.Column(db.Integer, db.ForeignKey('module_content.id'), nullable=False)
+    attempt_number = db.Column(db.Integer, default=1)
+    score = db.Column(db.Float, nullable=True)
+    total_questions = db.Column(db.Integer, nullable=False)
+    correct_answers = db.Column(db.Integer, nullable=False)
+    time_taken_minutes = db.Column(db.Integer, nullable=True)
+    started_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    answers = db.Column(db.Text, nullable=True)  # JSON string of answers
+    
+    # Relationships
+    user = db.relationship('User', backref='quiz_attempts')
+    quiz_content = db.relationship('ModuleContent', backref='quiz_attempts')
+
+class ContentInteraction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content_id = db.Column(db.Integer, db.ForeignKey('module_content.id'), nullable=False)
+    interaction_type = db.Column(db.String(50), nullable=False)  # view, download, complete
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    duration_seconds = db.Column(db.Integer, nullable=True)
+    completion_percentage = db.Column(db.Float, nullable=True)
+    
+    # Relationships
+    user = db.relationship('User', backref='content_interactions')
+    content = db.relationship('ModuleContent', backref='interactions')
+
+class CourseEnrollment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
+    enrolled_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    progress_percentage = db.Column(db.Float, default=0.0)
+    time_spent_minutes = db.Column(db.Integer, default=0)
+    last_accessed = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    user = db.relationship('User')
+    course = db.relationship('Course')
+
+class SystemMetrics(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    metric_name = db.Column(db.String(100), nullable=False)
+    metric_value = db.Column(db.Float, nullable=False)
+    metric_unit = db.Column(db.String(50), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    meta_data = db.Column(db.Text, nullable=True)  # JSON string for additional data
+
+class EmailMetrics(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    template_name = db.Column(db.String(100), nullable=False)
+    recipient_email = db.Column(db.String(120), nullable=False)
+    sent_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    opened_at = db.Column(db.DateTime, nullable=True)
+    clicked_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(50), default='sent')  # sent, delivered, opened, clicked, failed
+    error_message = db.Column(db.Text, nullable=True)
+
+class FeatureUsage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    feature_name = db.Column(db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    usage_count = db.Column(db.Integer, default=1)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationship
+    user = db.relationship('User', backref='feature_usage')
+
+class APIUsage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    endpoint = db.Column(db.String(200), nullable=False)
+    method = db.Column(db.String(10), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    response_time_ms = db.Column(db.Integer, nullable=True)
+    status_code = db.Column(db.Integer, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    ip_address = db.Column(db.String(45), nullable=True)
+    
+    # Relationship
+    user = db.relationship('User', backref='api_usage')

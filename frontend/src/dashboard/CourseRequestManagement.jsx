@@ -11,7 +11,7 @@ function CourseRequestManagement() {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/admin/course_requests');
+      const response = await fetch('/api/admin/course_requests?username=admin');
       const data = await response.json();
       
       if (data.success) {
@@ -40,7 +40,7 @@ function CourseRequestManagement() {
         body: JSON.stringify({
           request_id: requestId,
           action: action,
-          admin_username: 'superadmin', // In real app, get from JWT token
+          admin_username: 'admin', // Changed from 'superadmin' to 'admin'
           admin_notes: notes
         })
       });

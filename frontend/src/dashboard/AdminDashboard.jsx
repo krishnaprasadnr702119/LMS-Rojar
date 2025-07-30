@@ -4,7 +4,8 @@ import CourseList from './CourseList';
 import CourseRequestManagement from './CourseRequestManagement';
 // QuizManager has been integrated into CourseViewer
 import RoleIndicator from '../components/RoleIndicator';
-import { FaChevronLeft, FaChevronRight, FaBuilding, FaChartBar, FaBook, FaCog, FaCreditCard, FaTachometerAlt, FaShoppingCart, FaQuestionCircle, FaUsers } from 'react-icons/fa';
+import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import { FaChevronLeft, FaChevronRight, FaBuilding, FaChartBar, FaBook, FaCog, FaCreditCard, FaTachometerAlt, FaShoppingCart, FaQuestionCircle, FaUsers, FaSpinner, FaSave, FaUndo, FaDownload, FaUpload, FaBell, FaEnvelope, FaShieldAlt, FaDatabase, FaCloudUploadAlt } from 'react-icons/fa';
 import { getToken, parseJwt } from '../utils/auth';
 
 // Portal Admins List Component
@@ -42,7 +43,15 @@ function PortalAdminsList({ username }) {
       }
     };
     
+    // Initial fetch
     fetchPortalAdmins();
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchPortalAdmins();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [username]);
 
   // Filter portal admins based on search term
@@ -473,7 +482,15 @@ function TotalUsersList({ username }) {
       }
     };
     
+    // Initial fetch
     fetchUsers();
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchUsers();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [username]);
 
   // Filter users based on search term
@@ -821,6 +838,924 @@ function TotalUsersList({ username }) {
   );
 }
 
+// System Settings Component
+function SystemSettings({ username }) {
+  const [activeTab, setActiveTab] = useState('system');
+  const [settings, setSettings] = useState({});
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [newTemplate, setNewTemplate] = useState({
+    template_name: '',
+    subject: '',
+    html_content: '',
+    text_content: '',
+    variables: []
+  });
+
+  useEffect(() => {
+    fetchSettings();
+    fetchEmailTemplates();
+    fetchAnnouncements();
+    
+    // Set up auto-refresh every 60 seconds for settings
+    const interval = setInterval(() => {
+      fetchSettings();
+      fetchEmailTemplates();
+      fetchAnnouncements();
+    }, 60000); // 60 seconds for settings (less frequent than main dashboard)
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/admin/system_settings');
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setSettings(data.settings);
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to fetch settings');
+      }
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+      setError('Network error when fetching settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchEmailTemplates = async () => {
+    try {
+      const response = await fetch('/api/admin/email_templates');
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setEmailTemplates(data.templates);
+      }
+    } catch (err) {
+      console.error('Error fetching email templates:', err);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const response = await fetch('/api/admin/announcements');
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setAnnouncements(data.announcements);
+      }
+    } catch (err) {
+      console.error('Error fetching announcements:', err);
+    }
+  };
+
+  const initializeSettings = async () => {
+    try {
+      setSaving(true);
+      const response = await fetch('/api/admin/system_settings/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setMessage(`Initialized ${data.initialized_count} settings`);
+        await fetchSettings();
+      } else {
+        setError(data.error || 'Failed to initialize settings');
+      }
+    } catch (err) {
+      setError('Network error when initializing settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      setSaving(true);
+      const response = await fetch('/api/admin/system_settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings })
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setMessage('Settings updated successfully');
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to update settings');
+      }
+    } catch (err) {
+      setError('Network error when updating settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveEmailTemplate = async (templateData) => {
+    try {
+      setSaving(true);
+      const response = await fetch('/api/admin/email_templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateData)
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setMessage('Email template saved successfully');
+        setError(null);
+        await fetchEmailTemplates();
+        setEditingTemplate(null);
+        setNewTemplate({
+          template_name: '',
+          subject: '',
+          html_content: '',
+          text_content: '',
+          variables: []
+        });
+      } else {
+        setError(data.error || 'Failed to save email template');
+      }
+    } catch (err) {
+      setError('Network error when saving email template');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteEmailTemplate = async (templateName) => {
+    if (!confirm(`Are you sure you want to delete the template "${templateName}"?`)) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await fetch(`/api/admin/email_templates/${templateName}`, {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setMessage('Email template deleted successfully');
+        setError(null);
+        await fetchEmailTemplates();
+      } else {
+        setError(data.error || 'Failed to delete email template');
+      }
+    } catch (err) {
+      setError('Network error when deleting email template');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateSetting = (category, key, value, dataType = 'string') => {
+    setSettings(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category],
+        [key]: {
+          ...prev[category]?.[key],
+          value: value,
+          data_type: dataType
+        }
+      }
+    }));
+  };
+
+  const renderSettingInput = (category, key, setting) => {
+    const value = setting.value;
+    const dataType = setting.data_type || 'string';
+    
+    switch (dataType) {
+      case 'boolean':
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <input
+              type="checkbox"
+              checked={value || false}
+              onChange={(e) => updateSetting(category, key, e.target.checked, 'boolean')}
+              style={{
+                width: '20px',
+                height: '20px',
+                accentColor: '#3b82f6'
+              }}
+            />
+            <span>{value ? 'Enabled' : 'Disabled'}</span>
+          </div>
+        );
+      case 'integer':
+        return (
+          <input
+            type="number"
+            value={value || 0}
+            onChange={(e) => updateSetting(category, key, parseInt(e.target.value) || 0, 'integer')}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '14px'
+            }}
+          />
+        );
+      case 'json':
+        return (
+          <textarea
+            value={JSON.stringify(value, null, 2)}
+            onChange={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                updateSetting(category, key, parsed, 'json');
+              } catch {
+                // Invalid JSON, don't update
+              }
+            }}
+            rows={4}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontFamily: 'monospace',
+              resize: 'vertical'
+            }}
+          />
+        );
+      default:
+        return (
+          <input
+            type="text"
+            value={value || ''}
+            onChange={(e) => updateSetting(category, key, e.target.value, 'string')}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '14px'
+            }}
+          />
+        );
+    }
+  };
+
+  const tabs = [
+    { key: 'system', label: 'System', icon: <FaCog />, color: '#6b7280' },
+    { key: 'email', label: 'Email', icon: <FaEnvelope />, color: '#3b82f6' },
+    { key: 'security', label: 'Security', icon: <FaShieldAlt />, color: '#ef4444' },
+    { key: 'organization', label: 'Organizations', icon: <FaBuilding />, color: '#10b981' },
+    { key: 'course', label: 'Courses', icon: <FaBook />, color: '#f59e0b' },
+    { key: 'file_upload', label: 'File Upload', icon: <FaCloudUploadAlt />, color: '#8b5cf6' },
+    { key: 'templates', label: 'Email Templates', icon: <FaBell />, color: '#ec4899' },
+    { key: 'announcements', label: 'Announcements', icon: <FaBell />, color: '#06b6d4' }
+  ];
+
+  return (
+    <div style={{ padding: '40px', background: '#f8fafc', minHeight: '100vh' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '24px',
+          padding: '40px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '32px'
+          }}>
+            <div>
+              <h1 style={{
+                fontSize: '32px',
+                fontWeight: '800',
+                margin: 0,
+                background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text'
+              }}>
+                ⚙️ System Settings
+              </h1>
+              <p style={{
+                color: '#64748b',
+                margin: '8px 0 0 0',
+                fontSize: '16px'
+              }}>
+                Configure system-wide settings and preferences
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={initializeSettings}
+                disabled={saving}
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: saving ? 0.7 : 1
+                }}
+              >
+                {saving ? <FaSpinner className="spin" /> : <FaDownload />}
+                Initialize Defaults
+              </button>
+              <button
+                onClick={saveSettings}
+                disabled={saving}
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: saving ? 0.7 : 1
+                }}
+              >
+                {saving ? <FaSpinner className="spin" /> : <FaSave />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          {message && (
+            <div style={{
+              background: '#dcfce7',
+              padding: '16px',
+              borderRadius: '12px',
+              marginBottom: '24px',
+              border: '1px solid #bbf7d0',
+              color: '#16a34a'
+            }}>
+              {message}
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              background: '#fee2e2',
+              padding: '16px',
+              borderRadius: '12px',
+              marginBottom: '24px',
+              border: '1px solid #fecaca',
+              color: '#dc2626'
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '8px',
+            marginBottom: '32px',
+            borderBottom: '2px solid #f1f5f9',
+            paddingBottom: '16px'
+          }}>
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: '12px 20px',
+                  background: activeTab === tab.key 
+                    ? `linear-gradient(135deg, ${tab.color}, ${tab.color}cc)` 
+                    : 'transparent',
+                  color: activeTab === tab.key ? '#fff' : '#64748b',
+                  border: activeTab === tab.key ? 'none' : '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (activeTab !== tab.key) {
+                    e.currentTarget.style.background = `${tab.color}15`;
+                    e.currentTarget.style.color = tab.color;
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (activeTab !== tab.key) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#64748b';
+                  }
+                }}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '60px' }}>
+              <FaSpinner style={{ fontSize: '48px', animation: 'spin 1s linear infinite', color: '#3b82f6' }} />
+              <p style={{ color: '#64748b', marginTop: '16px' }}>Loading settings...</p>
+            </div>
+          ) : (
+            <div>
+              {/* Settings Content */}
+              {activeTab !== 'templates' && activeTab !== 'announcements' && settings[activeTab] && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                  gap: '24px'
+                }}>
+                  {Object.entries(settings[activeTab]).map(([key, setting]) => (
+                    <div key={key} style={{
+                      background: '#ffffff',
+                      padding: '24px',
+                      borderRadius: '16px',
+                      border: '1px solid #e5e7eb',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.05)'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}>
+                        <label style={{
+                          fontWeight: '600',
+                          color: '#1f2937',
+                          fontSize: '16px'
+                        }}>
+                          {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </label>
+                        {setting.description && (
+                          <p style={{
+                            color: '#64748b',
+                            fontSize: '14px',
+                            margin: 0
+                          }}>
+                            {setting.description}
+                          </p>
+                        )}
+                        {renderSettingInput(activeTab, key, setting)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Email Templates */}
+              {activeTab === 'templates' && (
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '24px'
+                  }}>
+                    <h3 style={{ margin: 0, color: '#1f2937' }}>Email Templates</h3>
+                    <button
+                      onClick={() => setEditingTemplate('new')}
+                      style={{
+                        padding: '12px 24px',
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <FaUpload />
+                      Create New Template
+                    </button>
+                  </div>
+
+                  {/* Template Editor Modal */}
+                  {editingTemplate && (
+                    <div style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      background: 'rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1000
+                    }}>
+                      <div style={{
+                        background: '#ffffff',
+                        borderRadius: '16px',
+                        padding: '32px',
+                        maxWidth: '800px',
+                        width: '90%',
+                        maxHeight: '90vh',
+                        overflow: 'auto'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '24px'
+                        }}>
+                          <h3 style={{ margin: 0, color: '#1f2937' }}>
+                            {editingTemplate === 'new' ? 'Create New Template' : 'Edit Template'}
+                          </h3>
+                          <button
+                            onClick={() => {
+                              setEditingTemplate(null);
+                              setNewTemplate({
+                                template_name: '',
+                                subject: '',
+                                html_content: '',
+                                text_content: '',
+                                variables: []
+                              });
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              fontSize: '24px',
+                              cursor: 'pointer',
+                              color: '#64748b'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div>
+                            <label style={{ fontWeight: '600', color: '#1f2937', marginBottom: '8px', display: 'block' }}>
+                              Template Name
+                            </label>
+                            <input
+                              type="text"
+                              value={editingTemplate === 'new' ? newTemplate.template_name : (editingTemplate?.template_name || '')}
+                              onChange={(e) => {
+                                if (editingTemplate === 'new') {
+                                  setNewTemplate(prev => ({ ...prev, template_name: e.target.value }));
+                                } else {
+                                  setEditingTemplate(prev => ({ ...prev, template_name: e.target.value }));
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e5e7eb',
+                                borderRadius: '8px',
+                                fontSize: '14px'
+                              }}
+                              placeholder="e.g., welcome_email, password_reset"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontWeight: '600', color: '#1f2937', marginBottom: '8px', display: 'block' }}>
+                              Subject Line
+                            </label>
+                            <input
+                              type="text"
+                              value={editingTemplate === 'new' ? newTemplate.subject : (editingTemplate?.subject || '')}
+                              onChange={(e) => {
+                                if (editingTemplate === 'new') {
+                                  setNewTemplate(prev => ({ ...prev, subject: e.target.value }));
+                                } else {
+                                  setEditingTemplate(prev => ({ ...prev, subject: e.target.value }));
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e5e7eb',
+                                borderRadius: '8px',
+                                fontSize: '14px'
+                              }}
+                              placeholder="Use {variable_name} for dynamic content"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontWeight: '600', color: '#1f2937', marginBottom: '8px', display: 'block' }}>
+                              HTML Content
+                            </label>
+                            <textarea
+                              value={editingTemplate === 'new' ? newTemplate.html_content : (editingTemplate?.html_content || '')}
+                              onChange={(e) => {
+                                if (editingTemplate === 'new') {
+                                  setNewTemplate(prev => ({ ...prev, html_content: e.target.value }));
+                                } else {
+                                  setEditingTemplate(prev => ({ ...prev, html_content: e.target.value }));
+                                }
+                              }}
+                              rows={12}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e5e7eb',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontFamily: 'monospace',
+                                resize: 'vertical'
+                              }}
+                              placeholder="HTML email template with {variable_name} placeholders"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontWeight: '600', color: '#1f2937', marginBottom: '8px', display: 'block' }}>
+                              Plain Text Content (optional)
+                            </label>
+                            <textarea
+                              value={editingTemplate === 'new' ? newTemplate.text_content : (editingTemplate?.text_content || '')}
+                              onChange={(e) => {
+                                if (editingTemplate === 'new') {
+                                  setNewTemplate(prev => ({ ...prev, text_content: e.target.value }));
+                                } else {
+                                  setEditingTemplate(prev => ({ ...prev, text_content: e.target.value }));
+                                }
+                              }}
+                              rows={6}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e5e7eb',
+                                borderRadius: '8px',
+                                fontSize: '14px',
+                                fontFamily: 'monospace',
+                                resize: 'vertical'
+                              }}
+                              placeholder="Plain text fallback for email clients that don't support HTML"
+                            />
+                          </div>
+
+                          <div>
+                            <label style={{ fontWeight: '600', color: '#1f2937', marginBottom: '8px', display: 'block' }}>
+                              Available Variables (comma-separated)
+                            </label>
+                            <input
+                              type="text"
+                              value={editingTemplate === 'new' ? newTemplate.variables.join(', ') : (editingTemplate?.variables?.join(', ') || '')}
+                              onChange={(e) => {
+                                const variables = e.target.value.split(',').map(v => v.trim()).filter(v => v);
+                                if (editingTemplate === 'new') {
+                                  setNewTemplate(prev => ({ ...prev, variables }));
+                                } else {
+                                  setEditingTemplate(prev => ({ ...prev, variables }));
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e5e7eb',
+                                borderRadius: '8px',
+                                fontSize: '14px'
+                              }}
+                              placeholder="org_name, user_name, user_email, temp_password"
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                            <button
+                              onClick={() => {
+                                setEditingTemplate(null);
+                                setNewTemplate({
+                                  template_name: '',
+                                  subject: '',
+                                  html_content: '',
+                                  text_content: '',
+                                  variables: []
+                                });
+                              }}
+                              style={{
+                                padding: '12px 24px',
+                                background: '#6b7280',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                const templateData = editingTemplate === 'new' ? newTemplate : editingTemplate;
+                                saveEmailTemplate(templateData);
+                              }}
+                              disabled={saving}
+                              style={{
+                                padding: '12px 24px',
+                                background: saving ? '#d1d5db' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              {saving ? <FaSpinner className="spin" /> : <FaSave />}
+                              Save Template
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Templates List */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                    gap: '24px'
+                  }}>
+                    {emailTemplates.map(template => (
+                      <div key={template.id} style={{
+                        background: '#ffffff',
+                        padding: '24px',
+                        borderRadius: '16px',
+                        border: '1px solid #e5e7eb',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.05)'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'start',
+                          marginBottom: '12px'
+                        }}>
+                          <h4 style={{ margin: 0, color: '#1f2937' }}>{template.template_name}</h4>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => setEditingTemplate(template)}
+                              style={{
+                                padding: '6px 12px',
+                                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteEmailTemplate(template.template_name)}
+                              style={{
+                                padding: '6px 12px',
+                                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 12px 0' }}>
+                          <strong>Subject:</strong> {template.subject}
+                        </p>
+                        <div style={{
+                          background: '#f9fafb',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontFamily: 'monospace',
+                          maxHeight: '200px',
+                          overflow: 'auto',
+                          marginBottom: '12px'
+                        }}>
+                          {template.html_content.substring(0, 300)}...
+                        </div>
+                        {template.variables && template.variables.length > 0 && (
+                          <div style={{ marginBottom: '12px' }}>
+                            <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 4px 0' }}>
+                              <strong>Variables:</strong>
+                            </p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {template.variables.map((variable, index) => (
+                                <span key={index} style={{
+                                  padding: '2px 8px',
+                                  background: '#dbeafe',
+                                  color: '#3b82f6',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: '600'
+                                }}>
+                                  {variable}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <p style={{ color: '#64748b', fontSize: '12px', margin: '0' }}>
+                          Updated: {new Date(template.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* System Announcements */}
+              {activeTab === 'announcements' && (
+                <div>
+                  <h3 style={{ marginBottom: '24px', color: '#1f2937' }}>System Announcements</h3>
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px'
+                  }}>
+                    {announcements.map(announcement => (
+                      <div key={announcement.id} style={{
+                        background: '#ffffff',
+                        padding: '24px',
+                        borderRadius: '16px',
+                        border: '1px solid #e5e7eb',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.05)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                          <h4 style={{ margin: 0, color: '#1f2937' }}>{announcement.title}</h4>
+                          <span style={{
+                            padding: '4px 12px',
+                            background: announcement.announcement_type === 'critical' ? '#fee2e2' : 
+                                       announcement.announcement_type === 'warning' ? '#fef3c7' : '#dbeafe',
+                            color: announcement.announcement_type === 'critical' ? '#dc2626' : 
+                                   announcement.announcement_type === 'warning' ? '#d97706' : '#3b82f6',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                          }}>
+                            {announcement.announcement_type.toUpperCase()}
+                          </span>
+                        </div>
+                        <p style={{ color: '#64748b', margin: '0 0 12px 0', lineHeight: 1.5 }}>{announcement.content}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#64748b' }}>
+                          <span>By: {announcement.created_by}</span>
+                          <span>{new Date(announcement.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+}
+
 
 function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -832,32 +1767,53 @@ function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshInterval, setRefreshInterval] = useState(null);
+  
+  const fetchSystemStats = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/admin/system_stats?username=${username}`);
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setStats(data.data);
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to fetch system statistics');
+        setStats(null);
+      }
+    } catch (err) {
+      console.error('Error fetching system stats:', err);
+      setError('Network error when fetching system statistics');
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   useEffect(() => {
-    const fetchSystemStats = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/admin/system_stats?username=${username}`);
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-          setStats(data.data);
-          setError(null);
-        } else {
-          setError(data.error || 'Failed to fetch system statistics');
-          setStats(null);
-        }
-      } catch (err) {
-        console.error('Error fetching system stats:', err);
-        setError('Network error when fetching system statistics');
-        setStats(null);
-      } finally {
-        setLoading(false);
+    // Initial fetch
+    fetchSystemStats();
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchSystemStats();
+    }, 30000); // 30 seconds
+    
+    setRefreshInterval(interval);
+    
+    // Cleanup on unmount
+    return () => {
+      if (interval) {
+        clearInterval(interval);
       }
     };
-    
-    fetchSystemStats();
   }, [username]);
+  
+  // Manual refresh function
+  const handleManualRefresh = () => {
+    fetchSystemStats();
+  };
 
   return (
     <>
@@ -866,6 +1822,10 @@ function AdminDashboard() {
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
           }
         `}
       </style>
@@ -1057,14 +2017,36 @@ function AdminDashboard() {
                 </div>
                 <div style={{
                   padding: '6px 12px',
-                  background: 'linear-gradient(135deg, #dbeafe, #e0e7ff)',
+                  background: loading ? 
+                    'linear-gradient(135deg, #fbbf24, #f59e0b)' : 
+                    'linear-gradient(135deg, #10b981, #059669)',
                   borderRadius: '20px',
                   fontSize: '12px',
                   fontWeight: '600',
-                  color: '#3730a3',
-                  border: '1px solid rgba(59,130,246,0.2)'
+                  color: '#ffffff',
+                  border: '1px solid rgba(16,185,129,0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.3s ease'
                 }}>
-                  LIVE
+                  {loading ? (
+                    <>
+                      <FaSpinner style={{ animation: 'spin 1s linear infinite', fontSize: '10px' }} />
+                      UPDATING
+                    </>
+                  ) : (
+                    <>
+                      <div style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#ffffff',
+                        animation: 'pulse 2s infinite'
+                      }}></div>
+                      LIVE
+                    </>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -1087,6 +2069,43 @@ function AdminDashboard() {
                   }}>
                     {username}
                   </span>
+                </div>
+                <button
+                  onClick={handleManualRefresh}
+                  style={{
+                    padding: '12px',
+                    background: loading ? 'linear-gradient(135deg, #6b7280, #9ca3af)' : 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: 'white',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                    fontSize: '16px'
+                  }}
+                  disabled={loading}
+                  title="Refresh Dashboard (Auto-refreshes every 30s)"
+                >
+                  {loading ? (
+                    <FaSpinner style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    '🔄'
+                  )}
+                </button>
+                <div style={{
+                  fontSize: '12px',
+                  color: '#6b7280',
+                  textAlign: 'center',
+                  padding: '4px 8px',
+                  background: 'rgba(107, 114, 128, 0.1)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(107, 114, 128, 0.2)'
+                }}>
+                  <div>Auto-refresh</div>
+                  <div style={{ fontWeight: '600', color: '#10b981' }}>30s</div>
                 </div>
                 <div style={{
                   width: 48, 
@@ -1550,6 +2569,12 @@ function AdminDashboard() {
         )}
         {activePage === 'Course Requests' && (
           <CourseRequestManagement />
+        )}
+        {activePage === 'Settings' && (
+          <SystemSettings username={username} />
+        )}
+        {activePage === 'Analytics' && (
+          <AnalyticsDashboard />
         )}
       </main>
     </div>
