@@ -401,12 +401,6 @@ def delete_organization(org_id):
             CourseProgress.query.filter(CourseProgress.user_id.in_(user_ids)).delete(synchronize_session=False)
             db.session.flush()
         
-        # Delete all certificates for users in this organization
-        if user_ids:
-            db.session.execute(text(f"DELETE FROM certificate WHERE user_id IN ({','.join(map(str, user_ids))})"))
-            db.session.flush()
-        
-        # First, remove all course assignments from employees in this organization
         employees = User.query.filter_by(org_id=org_id, role='employee').all()
         for employee in employees:
             employee.courses.clear()
@@ -611,8 +605,9 @@ def delete_course(course_id):
         db.session.flush()
         
         # 4. Delete certificates for this course
-        db.session.execute(text(f"DELETE FROM certificate WHERE course_id = {course_id}"))
-        db.session.flush()
+        # Note: Certificate table does not exist in current schema, skipping
+        # db.session.execute(text(f"DELETE FROM certificate WHERE course_id = {course_id}"))
+        # db.session.flush()
         
         # 5. Delete related course requests
         course_requests = CourseRequest.query.filter_by(course_id=course_id).all()
