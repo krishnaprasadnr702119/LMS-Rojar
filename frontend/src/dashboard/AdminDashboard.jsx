@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import OrganizationList from './OrganizationList';
 import CourseList from './CourseList';
 import CourseRequestManagement from './CourseRequestManagement';
-import OrganizationProgressOverview from './OrganizationProgressOverview';
 // QuizManager has been integrated into CourseViewer
 import RoleIndicator from '../components/RoleIndicator';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
@@ -1877,7 +1876,6 @@ function AdminDashboard() {
           {[
             { label: 'Dashboard', icon: <FaTachometerAlt />, color: '#3b82f6' },
             { label: 'Organization list', icon: <FaBuilding />, color: '#10b981' },
-            { label: 'Organization Progress', icon: <FaChartBar />, color: '#16a34a' },
             { label: 'Portal Admins', icon: <FaUsers />, color: '#ec4899' },
             { label: 'Total Users', icon: <FaUsers />, color: '#3b82f6' },
             { label: 'Courses', icon: <FaBook />, color: '#f59e0b' },
@@ -2559,9 +2557,6 @@ function AdminDashboard() {
         )}
         {activePage === 'Organization list' && (
           <OrganizationList />
-        )}
-        {activePage === 'Organization Progress' && (
-          <OrganizationProgressOverview />
         )}
         {activePage === 'Portal Admins' && (
           <PortalAdminsList username={username} />

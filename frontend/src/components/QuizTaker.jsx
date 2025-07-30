@@ -197,11 +197,6 @@ const QuizTaker = ({ quizIds, currentQuizId, onClose, username }) => {
           })
         };
         
-        // Show auto-completion notification if module was completed
-        if (data.module_auto_completed) {
-          showAutoCompletionNotification(processedResults.percentage_score);
-        }
-        
         // Check if this was the last quiz
         if (currentQuizIndex < quizzes.length - 1) {
           // Move to next quiz
@@ -250,56 +245,6 @@ const QuizTaker = ({ quizIds, currentQuizId, onClose, username }) => {
     
     // Reset timer
     setTimeLeft(180 * quizzes.length);
-  };
-
-  // Show auto-completion notification when quiz passes and module completes
-  const showAutoCompletionNotification = (score) => {
-    const notification = document.createElement('div');
-    notification.innerHTML = `
-      <div style="
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-        color: white;
-        padding: 16px 24px;
-        border-radius: 12px;
-        box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
-        z-index: 10000;
-        font-family: system-ui, -apple-system, sans-serif;
-        font-weight: 600;
-        animation: slideInRight 0.3s ease-out;
-        max-width: 300px;
-      ">
-        🎉 Quiz passed! Module completed!
-        <div style="font-size: 14px; opacity: 0.9; margin-top: 4px;">
-          Score: ${score}% - Progress updated automatically
-        </div>
-      </div>
-      <style>
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-      </style>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.style.animation = 'slideInRight 0.3s ease-out reverse';
-        setTimeout(() => {
-          document.body.removeChild(notification);
-        }, 300);
-      }
-    }, 5000);
   };
   
   // Handle moving to previous quiz

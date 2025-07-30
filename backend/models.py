@@ -127,28 +127,6 @@ class CourseProgress(db.Model):
     # Module progress (JSON field to store module completion status)
     module_progress = db.Column(db.Text, default='{}')  # JSON string: {module_id: {completed: true/false, completion_date: date}}
 
-# Certificate model for course completions
-class Certificate(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
-    certificate_number = db.Column(db.String(100), unique=True, nullable=False)
-    issued_date = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
-    completion_date = db.Column(db.DateTime, nullable=False)
-    final_score = db.Column(db.Float, nullable=True)  # Overall course score if applicable
-    certificate_data = db.Column(db.Text, nullable=True)  # JSON string with additional certificate details
-    status = db.Column(db.String(32), nullable=False, default='active')  # active, revoked, expired
-    expiry_date = db.Column(db.DateTime, nullable=True)  # For certificates that expire
-    download_count = db.Column(db.Integer, default=0)  # Track how many times downloaded
-    verification_hash = db.Column(db.String(255), nullable=True)  # For certificate verification
-    
-    # Relationships
-    user = db.relationship('User', backref='certificates')
-    course = db.relationship('Course', backref='certificates')
-    
-    def __repr__(self):
-        return f'<Certificate {self.certificate_number} for {self.user.username}>'
-
 class SystemSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(50), nullable=False)  # email, security, organization, etc.
@@ -253,11 +231,8 @@ class ContentInteraction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content_id = db.Column(db.Integer, db.ForeignKey('module_content.id'), nullable=False)
-    interaction_type = db.Column(db.String(50), nullable=False)  # video_progress, pdf_progress, quiz_completed, content_complete
-    interaction_data = db.Column(db.Text, nullable=True)  # JSON data with detailed interaction info
+    interaction_type = db.Column(db.String(50), nullable=False)  # view, download, complete
     timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     duration_seconds = db.Column(db.Integer, nullable=True)
     completion_percentage = db.Column(db.Float, nullable=True)
     
