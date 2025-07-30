@@ -261,6 +261,15 @@ def register_content_tracking_routes(app):
             if progress_record.completed_modules == progress_record.total_modules:
                 progress_record.completion_date = datetime.now(timezone.utc)
                 progress_record.risk_score = 0
+                
+                # Auto-generate certificate for completed course
+                try:
+                    from app import auto_generate_certificate_on_completion
+                    certificate = auto_generate_certificate_on_completion(user_id, course_id)
+                    if certificate:
+                        print(f"Auto-generated certificate {certificate.certificate_number} for user {username} completing course {course_id}")
+                except Exception as e:
+                    print(f"Error auto-generating certificate: {str(e)}")
             
             # Save changes
             progress_record.module_progress = json.dumps(module_progress)

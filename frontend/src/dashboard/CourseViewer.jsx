@@ -651,7 +651,7 @@ function CourseViewer() {
                 padding: '12px',
                 borderRadius: '8px'
               }}>
-                <p style={{ margin: '0 0 8px 0' }}><strong>Video path:</strong> {contentDetails.file_path}</p>
+            <p style={{ margin: '0 0 8px 0' }}><strong>Video path:</strong> {contentDetails.file_path}</p>
                 {fileStatus && (
                   <div style={{ 
                     background: '#fff', 

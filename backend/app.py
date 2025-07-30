@@ -12,7 +12,7 @@ import jwt
 import mimetypes
 from datetime import datetime
 from sqlalchemy import extract, func, case
-from models import db, User, Organization, Course, Module, ModuleContent, QuizQuestion, QuizOption, Task, organization_courses, CourseRequest, CourseProgress, SystemSettings, AuditLog, EmailTemplate, SystemAnnouncement, UserSession, PageView, QuizAttempt, ContentInteraction, CourseEnrollment, SystemMetrics, EmailMetrics, FeatureUsage, APIUsage
+from models import db, User, Organization, Course, Module, ModuleContent, QuizQuestion, QuizOption, Task, organization_courses, CourseRequest, CourseProgress, Certificate, SystemSettings, AuditLog, EmailTemplate, SystemAnnouncement, UserSession, PageView, QuizAttempt, ContentInteraction, CourseEnrollment, SystemMetrics, EmailMetrics, FeatureUsage, APIUsage
 from content_tracking import register_content_tracking_routes
 
 # Load environment variables from .env file
@@ -3363,6 +3363,327 @@ def submit_employee_quiz():
         
     except Exception as e:
         return jsonify({'success': False, 'error': f'Failed to submit quiz: {str(e)}'}), 500
+
+# Certificate Management Endpoints
+
+import hashlib
+import uuid
+from datetime import datetime, timedelta
+
+def generate_certificate_number():
+    """Generate a unique certificate number"""
+    timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    random_suffix = str(uuid.uuid4())[:8].upper()
+    return f"CERT-{timestamp}-{random_suffix}"
+
+def generate_verification_hash(user_id, course_id, certificate_number):
+    """Generate a verification hash for the certificate"""
+    data = f"{user_id}-{course_id}-{certificate_number}-{datetime.utcnow().isoformat()}"
+    return hashlib.sha256(data.encode()).hexdigest()
+
+@app.route('/api/employee/generate_certificate', methods=['POST'])
+def generate_certificate():
+    """Generate certificate for completed course"""
+    try:
+        data = request.json
+        username = data.get('username')
+        course_id = data.get('course_id')
+        
+        if not username or not course_id:
+            return jsonify({'success': False, 'error': 'Username and course_id required'}), 400
+        
+        # Find the user
+        user = User.query.filter_by(username=username, role='employee').first()
+        if not user:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        # Get the course
+        course = Course.query.get(course_id)
+        if not course:
+            return jsonify({'success': False, 'error': 'Course not found'}), 404
+        
+        # Check if course is assigned to user
+        if course not in user.courses:
+            return jsonify({'success': False, 'error': 'Course not assigned to employee'}), 403
+        
+        # Check if course is completed
+        progress = CourseProgress.query.filter_by(user_id=user.id, course_id=course_id).first()
+        if not progress or not progress.completion_date or progress.progress_percentage < 100:
+            return jsonify({'success': False, 'error': 'Course not completed. Complete all modules to generate certificate.'}), 400
+        
+        # Check if certificate already exists
+        existing_cert = Certificate.query.filter_by(user_id=user.id, course_id=course_id, status='active').first()
+        if existing_cert:
+            return jsonify({
+                'success': True,
+                'message': 'Certificate already exists',
+                'certificate': {
+                    'id': existing_cert.id,
+                    'certificate_number': existing_cert.certificate_number,
+                    'issued_date': existing_cert.issued_date.isoformat(),
+                    'completion_date': existing_cert.completion_date.isoformat(),
+                    'verification_hash': existing_cert.verification_hash,
+                    'course_title': course.title
+                }
+            })
+        
+        # Generate certificate
+        certificate_number = generate_certificate_number()
+        verification_hash = generate_verification_hash(user.id, course_id, certificate_number)
+        
+        # Calculate final score if available (from quiz results, etc.)
+        final_score = None
+        try:
+            # You could calculate this from quiz results, module completions, etc.
+            final_score = progress.progress_percentage
+        except:
+            pass
+        
+        # Create certificate data
+        certificate_data = {
+            'employee_name': user.username,
+            'course_title': course.title,
+            'course_description': course.description,
+            'completion_modules': progress.completed_modules,
+            'total_modules': progress.total_modules,
+            'organization': user.org_id,
+            'generation_timestamp': datetime.utcnow().isoformat()
+        }
+        
+        certificate = Certificate(
+            user_id=user.id,
+            course_id=course_id,
+            certificate_number=certificate_number,
+            completion_date=progress.completion_date,
+            final_score=final_score,
+            certificate_data=json.dumps(certificate_data),
+            verification_hash=verification_hash
+        )
+        
+        db.session.add(certificate)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Certificate generated successfully',
+            'certificate': {
+                'id': certificate.id,
+                'certificate_number': certificate_number,
+                'issued_date': certificate.issued_date.isoformat(),
+                'completion_date': certificate.completion_date.isoformat(),
+                'verification_hash': verification_hash,
+                'course_title': course.title,
+                'final_score': final_score
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'Failed to generate certificate: {str(e)}'}), 500
+
+@app.route('/api/employee/my_certificates', methods=['GET'])
+def get_employee_certificates():
+    """Get all certificates for the employee"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'success': False, 'error': 'Username required'}), 400
+        
+        # Find the user
+        user = User.query.filter_by(username=username, role='employee').first()
+        if not user:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        # Get all active certificates for the user
+        certificates = Certificate.query.filter_by(user_id=user.id, status='active').order_by(Certificate.issued_date.desc()).all()
+        
+        certificates_data = []
+        for cert in certificates:
+            certificate_data = json.loads(cert.certificate_data) if cert.certificate_data else {}
+            
+            # Get organization name if available
+            organization_name = "Unknown Organization"
+            if cert.user.org_id:
+                from models import Organization
+                org = Organization.query.get(cert.user.org_id)
+                if org:
+                    organization_name = org.name
+            
+            certificates_data.append({
+                'id': cert.id,
+                'certificate_number': cert.certificate_number,
+                'course_title': cert.course.title,
+                'course_description': cert.course.description,
+                'issued_date': cert.issued_date.isoformat(),
+                'completion_date': cert.completion_date.isoformat(),
+                'final_score': cert.final_score,
+                'verification_hash': cert.verification_hash,
+                'download_count': cert.download_count,
+                'status': cert.status,
+                'expiry_date': cert.expiry_date.isoformat() if cert.expiry_date else None,
+                'certificate_data': certificate_data,
+                'organization_name': organization_name
+            })
+        
+        return jsonify({
+            'success': True,
+            'certificates': certificates_data,
+            'total_count': len(certificates_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Failed to fetch certificates: {str(e)}'}), 500
+
+@app.route('/api/employee/download_certificate/<int:certificate_id>', methods=['GET'])
+def download_certificate(certificate_id):
+    """Download/view certificate details"""
+    try:
+        username = request.args.get('username')
+        if not username:
+            return jsonify({'success': False, 'error': 'Username required'}), 400
+        
+        # Find the user
+        user = User.query.filter_by(username=username, role='employee').first()
+        if not user:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        # Get the certificate
+        certificate = Certificate.query.filter_by(id=certificate_id, user_id=user.id, status='active').first()
+        if not certificate:
+            return jsonify({'success': False, 'error': 'Certificate not found'}), 404
+        
+        # Increment download count
+        certificate.download_count += 1
+        db.session.commit()
+        
+        # Get certificate data
+        certificate_data = json.loads(certificate.certificate_data) if certificate.certificate_data else {}
+        
+        # Get organization name if available
+        organization_name = "Unknown Organization"
+        if user.org_id:
+            from models import Organization
+            org = Organization.query.get(user.org_id)
+            if org:
+                organization_name = org.name
+        
+        # Return certificate data for PDF generation or display
+        return jsonify({
+            'success': True,
+            'certificate': {
+                'id': certificate.id,
+                'certificate_number': certificate.certificate_number,
+                'employee_name': user.username,
+                'employee_email': user.email,
+                'course_title': certificate.course.title,
+                'course_description': certificate.course.description,
+                'issued_date': certificate.issued_date.isoformat(),
+                'completion_date': certificate.completion_date.isoformat(),
+                'final_score': certificate.final_score,
+                'verification_hash': certificate.verification_hash,
+                'certificate_data': certificate_data,
+                'organization_name': organization_name,
+                'template_type': 'course_completion_certificate',
+                'valid_until': certificate.expiry_date.isoformat() if certificate.expiry_date else None
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Failed to download certificate: {str(e)}'}), 500
+
+@app.route('/api/verify_certificate', methods=['GET'])
+def verify_certificate():
+    """Public endpoint to verify certificate authenticity"""
+    try:
+        certificate_number = request.args.get('certificate_number')
+        verification_hash = request.args.get('verification_hash')
+        
+        if not certificate_number:
+            return jsonify({'success': False, 'error': 'Certificate number required'}), 400
+        
+        # Find certificate
+        certificate = Certificate.query.filter_by(certificate_number=certificate_number, status='active').first()
+        if not certificate:
+            return jsonify({'success': False, 'valid': False, 'message': 'Certificate not found'})
+        
+        # Verify hash if provided
+        if verification_hash and certificate.verification_hash != verification_hash:
+            return jsonify({'success': False, 'valid': False, 'message': 'Invalid verification hash'})
+        
+        # Check if expired
+        if certificate.expiry_date and certificate.expiry_date < datetime.utcnow():
+            return jsonify({'success': False, 'valid': False, 'message': 'Certificate has expired'})
+        
+        return jsonify({
+            'success': True,
+            'valid': True,
+            'certificate': {
+                'certificate_number': certificate.certificate_number,
+                'employee_name': certificate.user.username,
+                'course_title': certificate.course.title,
+                'issued_date': certificate.issued_date.isoformat(),
+                'completion_date': certificate.completion_date.isoformat(),
+                'status': certificate.status
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Failed to verify certificate: {str(e)}'}), 500
+
+# Auto-generate certificate when course is completed
+def auto_generate_certificate_on_completion(user_id, course_id):
+    """Automatically generate certificate when course is completed"""
+    try:
+        # Check if certificate already exists
+        existing_cert = Certificate.query.filter_by(user_id=user_id, course_id=course_id, status='active').first()
+        if existing_cert:
+            return existing_cert
+        
+        # Get course and progress info
+        course = Course.query.get(course_id)
+        user = User.query.get(user_id)
+        progress = CourseProgress.query.filter_by(user_id=user_id, course_id=course_id).first()
+        
+        if not course or not user or not progress or progress.progress_percentage < 100:
+            return None
+        
+        # Generate certificate
+        certificate_number = generate_certificate_number()
+        verification_hash = generate_verification_hash(user_id, course_id, certificate_number)
+        
+        certificate_data = {
+            'employee_name': user.username,
+            'employee_email': user.email,
+            'course_title': course.title,
+            'course_description': course.description,
+            'completion_modules': progress.completed_modules,
+            'total_modules': progress.total_modules,
+            'organization_id': user.org_id,
+            'generation_timestamp': datetime.utcnow().isoformat(),
+            'auto_generated': True,
+            'certificate_template': 'course_completion',
+            'achievement_level': 'completed' if progress.progress_percentage >= 100 else 'partial',
+            'course_completion_percentage': progress.progress_percentage
+        }
+        
+        certificate = Certificate(
+            user_id=user_id,
+            course_id=course_id,
+            certificate_number=certificate_number,
+            completion_date=progress.completion_date,
+            final_score=progress.progress_percentage,
+            certificate_data=json.dumps(certificate_data),
+            verification_hash=verification_hash
+        )
+        
+        db.session.add(certificate)
+        db.session.commit()
+        
+        return certificate
+        
+    except Exception as e:
+        print(f"Error auto-generating certificate: {str(e)}")
+        return None
 
 # System Settings Management Endpoints
 

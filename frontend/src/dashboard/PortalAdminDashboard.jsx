@@ -984,7 +984,7 @@ function EmployeesContent() {
                   >
                     Delete
                   </button>
-                  <button
+                  {/* <button
                     onClick={() => openAssignModal(employee)}
                     style={{
                       background: '#3b82f6',
@@ -1001,7 +1001,7 @@ function EmployeesContent() {
                     onMouseOut={(e) => e.target.style.background = '#3b82f6'}
                   >
                     Assign Course
-                  </button>
+                  </button> */}
                 </div>
               </div>
             ))}
