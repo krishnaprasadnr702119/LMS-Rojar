@@ -148,6 +148,56 @@ mail = Mail(app)
 def hello():
     return jsonify({'message': 'Hello from the Python backend!', 'status': 'success'})
 
+# Debug endpoint to test password hashing (remove in production)
+@app.route('/api/test_password', methods=['POST'])
+def test_password():
+    data = request.get_json()
+    password = data.get('password', 'test123')
+    
+    # Hash the password
+    hashed = hash_password(password)
+    
+    # Verify the password
+    is_valid = verify_password(hashed, password)
+    
+    return jsonify({
+        'original_password': password,
+        'hashed_password': hashed,
+        'verification_result': is_valid
+    })
+
+@app.route('/api/debug_user_login', methods=['POST'])
+def debug_user_login():
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        # Get user from database
+        user = User.query.filter_by(username=username).first()
+        
+        if not user:
+            return jsonify({
+                'found_user': False,
+                'message': 'User not found'
+            }), 404
+        
+        # Check password verification using the correct function
+        password_valid = verify_password(user.password, password)
+        
+        return jsonify({
+            'found_user': True,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'stored_password_hash': user.password,
+            'provided_password': password,
+            'password_verification': password_valid
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/portal_admin/course_assignments/<int:course_id>', methods=['GET'])
 def get_course_assignments(course_id):
     """Return all employees for the organization assigned to the course, with assignment flag."""
@@ -302,12 +352,23 @@ def create_organization():
         db.session.add(portal_admin_user)
         db.session.commit()
         
+        # Send welcome email to portal admin
+        email_sent, email_message = send_invite_email(
+            user_email=admin_email,
+            user_name=portal_admin,
+            org_name=name,
+            temp_password=admin_password
+        )
+        
         return jsonify({
             'success': True, 
             'message': 'Organization and portal admin created successfully',
             'organization_id': org.id,
             'admin_username': portal_admin,
-            'admin_email': admin_email
+            'admin_email': admin_email,
+            'admin_password': admin_password,  # For testing - remove in production
+            'email_sent': email_sent,
+            'email_message': email_message
         })
         
     except Exception as e:
@@ -1276,11 +1337,22 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
+    print(f"Login attempt - Username: {username}")  # Debug log
+    
     # Find user by username only
     user = User.query.filter_by(username=username).first()
     
+    if not user:
+        print(f"User not found: {username}")  # Debug log
+        return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+    
+    print(f"User found - Role: {user.role}, Email: {user.email}")  # Debug log
+    
     # Verify password using bcrypt
-    if user and verify_password(user.password, password):
+    password_valid = verify_password(user.password, password)
+    print(f"Password verification result: {password_valid}")  # Debug log
+    
+    if user and password_valid:
         # Generate JWT token with role
         payload = {
             'user_id': user.id,
@@ -1289,8 +1361,10 @@ def login():
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=8)
         }
         token = jwt.encode(payload, 'your_secret_key', algorithm='HS256')
+        print(f"Login successful for user: {username}")  # Debug log
         return jsonify({'success': True, 'message': 'Login successful', 'token': token, 'role': user.role})
     else:
+        print(f"Login failed for user: {username}")  # Debug log
         return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
 # Portal Admin API endpoints
@@ -1675,7 +1749,14 @@ def invite_employee():
             
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': f'Failed to create user: {str(e)}'}), 500
+            return jsonify({
+                'success': False,
+                'error': f'Failed to create user: {str(e)}',
+                'details': {
+                    'error_type': type(e).__name__,
+                    'message': str(e)
+                }
+            }), 500
             
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
@@ -1705,6 +1786,38 @@ def get_organization_employees(org_id):
             'organization': {'id': organization.id, 'name': organization.name},
             'employees': employee_list,
             'total_employees': len(employee_list)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/portal_admin/organizations/<int:org_id>/courses', methods=['GET'])
+def get_organization_courses(org_id):
+    """Get all courses assigned to a specific organization"""
+    try:
+        # Check if organization exists
+        organization = db.session.get(Organization, org_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+        
+        # Get all courses assigned to this organization
+        courses = organization.courses
+        
+        course_list = []
+        for course in courses:
+            course_list.append({
+                'id': course.id,
+                'title': course.title,
+                'description': course.description,
+                'status': course.status,
+                'module_count': len(course.modules),
+                'created': course.created.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return jsonify({
+            'organization': {'id': organization.id, 'name': organization.name},
+            'courses': course_list,
+            'total_courses': len(course_list)
         }), 200
         
     except Exception as e:
@@ -1797,8 +1910,8 @@ def create_employee():
             try:
                 import jwt
                 payload = jwt.decode(token, options={"verify_signature": False})
-                username = payload.get('username')
-                portal_admin = User.query.filter_by(username=username, role='portal_admin').first()
+                portal_admin_username = payload.get('username')
+                portal_admin = User.query.filter_by(username=portal_admin_username, role='portal_admin').first()
             except Exception:
                 return jsonify({'error': 'Invalid token'}), 401
         
@@ -1858,7 +1971,14 @@ def create_employee():
             
         except Exception as e:
             db.session.rollback()
-            return jsonify({'error': f'Failed to create user: {str(e)}'}), 500
+            return jsonify({
+                'success': False,
+                'error': f'Failed to create user: {str(e)}',
+                'details': {
+                    'error_type': type(e).__name__,
+                    'message': str(e)
+                }
+            }), 500
             
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
@@ -3837,6 +3957,3 @@ def export_analytics():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
